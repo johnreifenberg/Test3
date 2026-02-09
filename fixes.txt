@@ -1,0 +1,7 @@
+The growth rate parameter is unclear. Is this like an escalation parameter? 
+
+The parameters tab should be renamed "cashflows". It should allow the user to display individual streams as well as all of the streams plotted in a single chart. That single chart should allow the user to turn on and off which streams are displayed. 
+
+A child revenue stream by definition has a mathematical linkage to its parent stream. It is a time and value transformation of the parent revenue stream. For example, allocations are a child stream that are a fixed fraction of the parent revenue stream but occur concurrent in time. There does not need to specific input for allocations. That is a special case of child revenue. Other revenue streams (such as maintenance contracts or software upgrades in a software business model) may be a fraction of the parent revenue stream that occurs at predictable later points in time. For example, if I sell a perpetual license in month 2, I can also sell a service and maintenance contract at some conversion rate. Those contracts will renew at some frequency (e.g. annually), so I will have child revenue in month 2, 14, 26 and so on. I need to be able to very clearly input the value of the service contract (or price ratio relative to the parent revenue), the uncertainty in that value or price ratio (i.e. its own distribution), its conversion rate for the child revenue, the periodicity of future revenue, and the month when the child stream ends. 
+
+The monthly cashflows in the excel output should be transposed. 

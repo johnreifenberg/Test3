@@ -1,0 +1,81 @@
+{
+  "name": "Perpetual Software License Model",
+  "settings": {
+    "forecast_months": 60,
+    "discount_rate": {"type": "NORMAL", "params": {"mean": 0.12, "std": 0.02}},
+    "terminal_growth_rate": 0.025,
+    "escalation_rate": {"type": "NORMAL", "params": {"mean": 0.03, "std": 0.01}}
+  },
+  "streams": [
+    {
+      "id": "license_sales",
+      "name": "Perpetual License Sales",
+      "stream_type": "REVENUE",
+      "start_month": 0,
+      "end_month": null,
+      "amount": {"type": "NORMAL", "params": {"mean": 500000, "std": 75000}},
+      "adoption_curve": {"type": "LOGISTIC", "params": {"amplitude": 1.0, "midpoint": 12, "steepness": 0.3}},
+      "parent_stream_id": null,
+      "conversion_rate": 1.0,
+      "trigger_delay_months": 0,
+      "periodicity_months": null,
+      "amount_is_ratio": true
+    },
+    {
+      "id": "maintenance",
+      "name": "Annual Maintenance Revenue",
+      "stream_type": "REVENUE",
+      "start_month": 0,
+      "end_month": null,
+      "amount": {"type": "NORMAL", "params": {"mean": 0.20, "std": 0.03}},
+      "adoption_curve": null,
+      "parent_stream_id": "license_sales",
+      "conversion_rate": 0.85,
+      "trigger_delay_months": 12,
+      "periodicity_months": 12,
+      "amount_is_ratio": true
+    },
+    {
+      "id": "sales_commission",
+      "name": "Sales Commission",
+      "stream_type": "COST",
+      "start_month": 0,
+      "end_month": null,
+      "amount": {"type": "FIXED", "params": {"value": 0.15}},
+      "adoption_curve": null,
+      "parent_stream_id": "license_sales",
+      "conversion_rate": 1.0,
+      "trigger_delay_months": 0,
+      "periodicity_months": null,
+      "amount_is_ratio": true
+    },
+    {
+      "id": "ga_pool",
+      "name": "G&A Cost Pool",
+      "stream_type": "COST",
+      "start_month": 0,
+      "end_month": null,
+      "amount": {"type": "FIXED", "params": {"value": 0.05}},
+      "adoption_curve": null,
+      "parent_stream_id": "license_sales",
+      "conversion_rate": 1.0,
+      "trigger_delay_months": 0,
+      "periodicity_months": null,
+      "amount_is_ratio": true
+    },
+    {
+      "id": "dev_costs",
+      "name": "Development Costs",
+      "stream_type": "COST",
+      "start_month": 0,
+      "end_month": null,
+      "amount": {"type": "NORMAL", "params": {"mean": 150000, "std": 20000}},
+      "adoption_curve": null,
+      "parent_stream_id": null,
+      "conversion_rate": 1.0,
+      "trigger_delay_months": 0,
+      "periodicity_months": null,
+      "amount_is_ratio": true
+    }
+  ]
+}

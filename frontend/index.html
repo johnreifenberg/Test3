@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inflection</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <h1>Inflection</h1>
+        <div class="header-actions">
+            <button id="btn-new" class="btn btn-primary">New Model</button>
+            <button id="btn-load" class="btn">Load Model</button>
+            <button id="btn-save" class="btn">Save Model</button>
+            <button id="btn-template" class="btn">Load Template</button>
+        </div>
+    </header>
+
+    <!-- Main Layout -->
+    <div class="container">
+        <!-- Sidebar: Stream List -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>Streams</h2>
+                <button id="btn-add-stream" class="btn btn-sm btn-primary">+ Add Stream</button>
+            </div>
+            <div id="stream-list"></div>
+        </aside>
+
+        <!-- Main Content: Tabs -->
+        <main class="main-content">
+            <div class="tabs">
+                <button class="tab active" data-tab="builder">Model Builder</button>
+                <button class="tab" data-tab="cashflows">Cashflows</button>
+                <button class="tab" data-tab="calculate">Calculate</button>
+                <button class="tab" data-tab="results">Results</button>
+            </div>
+
+            <!-- Tab: Model Builder -->
+            <div id="tab-builder" class="tab-content active">
+                <h2>Model Settings</h2>
+                <form id="form-settings" class="form-grid">
+                    <div class="form-group">
+                        <label for="model-name">Model Name</label>
+                        <input type="text" id="model-name" value="Untitled Model">
+                    </div>
+                    <div class="form-group">
+                        <label for="forecast-months">Forecast Months</label>
+                        <input type="number" id="forecast-months" value="60" min="1" max="360">
+                    </div>
+                    <div class="form-group">
+                        <label for="calculation-mode">Calculation Mode</label>
+                        <select id="calculation-mode">
+                            <option value="NPV" selected>NPV (Net Present Value)</option>
+                            <option value="IRR">IRR (Internal Rate of Return)</option>
+                        </select>
+                        <p class="help-text" id="calc-mode-help">NPV discounts future cashflows to present value. IRR finds the rate that makes NPV = 0.</p>
+                    </div>
+                    <div id="terminal-growth-section">
+                        <div class="form-group">
+                            <label for="terminal-growth">Terminal Growth Rate</label>
+                            <input type="number" id="terminal-growth" value="0.025" step="0.001" min="0" max="0.2">
+                        </div>
+                    </div>
+                    <div id="discount-rate-section">
+                        <div class="form-group">
+                            <label>Discount Rate Distribution</label>
+                            <div id="discount-rate-inputs" class="dist-inputs">
+                                <select id="dr-dist-type">
+                                    <option value="FIXED">Fixed</option>
+                                    <option value="NORMAL" selected>Normal</option>
+                                    <option value="LOGNORMAL">Lognormal</option>
+                                    <option value="UNIFORM">Uniform</option>
+                                    <option value="TRIANGULAR">Triangular</option>
+                                </select>
+                                <div id="dr-params"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label><input type="checkbox" id="has-escalation"> Enable Escalation Rate</label>
+                        <p class="help-text">Annual escalation rate applied to all streams, compounded monthly.</p>
+                    </div>
+                    <div id="escalation-section" style="display:none;">
+                        <div class="form-group">
+                            <label>Escalation Rate Distribution</label>
+                            <div class="dist-inputs">
+                                <select id="esc-dist-type">
+                                    <option value="FIXED">Fixed</option>
+                                    <option value="NORMAL" selected>Normal</option>
+                                    <option value="UNIFORM">Uniform</option>
+                                    <option value="TRIANGULAR">Triangular</option>
+                                </select>
+                                <div id="esc-params"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button" id="btn-update-settings" class="btn btn-primary">Update Settings</button>
+                </form>
+            </div>
+
+            <!-- Tab: Cashflows -->
+            <div id="tab-cashflows" class="tab-content">
+                <h2>Stream Cashflows</h2>
+                <div id="cashflows-container"></div>
+            </div>
+
+            <!-- Tab: Calculate -->
+            <div id="tab-calculate" class="tab-content">
+                <h2>Run Analysis</h2>
+                <div class="calc-buttons">
+                    <div class="calc-section">
+                        <h3>Deterministic Analysis</h3>
+                        <p>Calculate NPV and IRR using expected values for all parameters.</p>
+                        <button id="btn-run-deterministic" class="btn btn-primary btn-lg">Run Deterministic</button>
+                    </div>
+                    <div class="calc-section">
+                        <h3>Monte Carlo Simulation</h3>
+                        <p>Run thousands of scenarios to quantify risk.</p>
+                        <div class="form-inline">
+                            <label for="n-simulations">Simulations:</label>
+                            <input type="number" id="n-simulations" value="10000" min="100" max="100000" step="1000">
+                        </div>
+                        <button id="btn-run-monte-carlo" class="btn btn-primary btn-lg">Run Monte Carlo</button>
+                    </div>
+                    <div class="calc-section">
+                        <h3>Sensitivity Analysis</h3>
+                        <p>Identify which inputs matter most with tornado charts.</p>
+                        <button id="btn-run-sensitivity" class="btn btn-primary btn-lg">Run Sensitivity</button>
+                    </div>
+                </div>
+                <div id="calculation-status" class="status-bar"></div>
+            </div>
+
+            <!-- Tab: Results -->
+            <div id="tab-results" class="tab-content">
+                <div id="results-container">
+                    <p class="placeholder">Run a calculation to see results.</p>
+                </div>
+                <button id="btn-export-excel" class="btn btn-primary" style="display:none;">Export to Excel</button>
+            </div>
+        </main>
+    </div>
+
+    <!-- Stream Modal -->
+    <div id="modal-stream" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-stream-title">Add Stream</h2>
+                <span class="close" id="close-stream-modal">&times;</span>
+            </div>
+            <form id="form-stream">
+                <!-- Formula bar -->
+                <div class="formula-bar" id="formula-bar">
+                    <span class="formula-label" id="formula-label">Monthly Cashflow =</span>
+                    <span class="formula-term" id="formula-amount">Base Amount</span>
+                    <span class="formula-op" id="formula-adoption-op" style="display:none;"> &times; </span>
+                    <span class="formula-term" id="formula-adoption" style="display:none;">Adoption %</span>
+                </div>
+
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="stream-id">Stream ID</label>
+                        <input type="text" id="stream-id" required placeholder="e.g. revenue_main">
+                    </div>
+                    <div class="form-group">
+                        <label for="stream-name">Name</label>
+                        <input type="text" id="stream-name" required placeholder="e.g. Main Revenue">
+                    </div>
+                    <div class="form-group">
+                        <label for="stream-type">Type</label>
+                        <select id="stream-type">
+                            <option value="REVENUE">Revenue</option>
+                            <option value="COST">Cost</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="stream-start">Start Month</label>
+                        <input type="number" id="stream-start" value="0" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="stream-end">End Month (blank = perpetual)</label>
+                        <input type="number" id="stream-end" min="0" placeholder="Perpetual">
+                    </div>
+                    <div class="form-group">
+                        <label for="stream-parent">Parent Stream</label>
+                        <select id="stream-parent">
+                            <option value="">None (root stream)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Root stream fields -->
+                <div id="root-stream-fields">
+                    <h3>Base Amount</h3>
+                    <div class="form-group">
+                        <label for="amount-entry-mode">Entry Mode</label>
+                        <select id="amount-entry-mode">
+                            <option value="total">Total Dollars</option>
+                            <option value="unit">Unit Value &times; Quantity</option>
+                        </select>
+                    </div>
+
+                    <!-- Total dollars mode -->
+                    <div id="amount-total-mode">
+                        <p class="help-text">The total value or market size for this stream. Use a distribution to add uncertainty.</p>
+                        <div class="dist-input-group" id="amount-dist-group">
+                            <select id="amount-dist-type" class="dist-type-select">
+                                <option value="FIXED">Fixed</option>
+                                <option value="NORMAL">Normal</option>
+                                <option value="LOGNORMAL">Lognormal</option>
+                                <option value="UNIFORM">Uniform</option>
+                                <option value="TRIANGULAR">Triangular</option>
+                                <option value="LOGISTIC">Logistic (Adoption)</option>
+                            </select>
+                            <div id="amount-params" class="dist-params"></div>
+                        </div>
+                    </div>
+
+                    <!-- Unit value x quantity mode -->
+                    <div id="amount-unit-mode" style="display:none;">
+                        <p class="help-text">Calculate market size as Unit Value (price/cost) &times; Market Units (quantity). Both support distributions for uncertainty.</p>
+                        <h4>Unit Value (Price/Cost per Unit)</h4>
+                        <div class="dist-input-group" id="unit-value-dist-group">
+                            <select id="unit-value-dist-type" class="dist-type-select">
+                                <option value="FIXED">Fixed</option>
+                                <option value="NORMAL">Normal</option>
+                                <option value="LOGNORMAL">Lognormal</option>
+                                <option value="UNIFORM">Uniform</option>
+                                <option value="TRIANGULAR">Triangular</option>
+                            </select>
+                            <div id="unit-value-params" class="dist-params"></div>
+                        </div>
+                        <h4>Market Units (Quantity)</h4>
+                        <div class="dist-input-group" id="market-units-dist-group">
+                            <select id="market-units-dist-type" class="dist-type-select">
+                                <option value="FIXED">Fixed</option>
+                                <option value="NORMAL">Normal</option>
+                                <option value="LOGNORMAL">Lognormal</option>
+                                <option value="UNIFORM">Uniform</option>
+                                <option value="TRIANGULAR">Triangular</option>
+                            </select>
+                            <div id="market-units-params" class="dist-params"></div>
+                        </div>
+                        <div class="estimated-total" id="unit-estimated-total">
+                            <strong>Estimated Total:</strong> <span id="unit-total-value">$0</span>
+                        </div>
+                    </div>
+
+                    <h3>Adoption Curve (optional)</h3>
+                    <div class="form-group">
+                        <label><input type="checkbox" id="has-adoption"> Enable Adoption Curve</label>
+                    </div>
+                    <p class="help-text">Models gradual market penetration over time.</p>
+                    <div id="adoption-section" style="display:none;">
+                        <div class="dist-input-group" id="adoption-dist-group">
+                            <select id="adoption-dist-type" class="dist-type-select">
+                                <option value="LOGISTIC" selected>Logistic (S-Curve)</option>
+                                <option value="LINEAR">Linear (Constant Rate)</option>
+                            </select>
+                            <div id="adoption-params" class="dist-params"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Child stream fields (shown when parent is selected) -->
+                <div id="child-stream-fields" style="display:none;">
+                    <h3 id="child-amount-heading">Price Ratio</h3>
+                    <p class="help-text" id="child-amount-help">Fraction of the parent stream's value. Use a distribution to model uncertainty.</p>
+                    <div class="form-group">
+                        <label><input type="checkbox" id="amount-is-ratio" checked> Value is a ratio of parent</label>
+                        <p class="help-text">When checked, the amount is multiplied by the parent's cashflow. When unchecked, it is an absolute value per event.</p>
+                    </div>
+                    <div class="dist-input-group" id="child-amount-dist-group">
+                        <select id="child-amount-dist-type" class="dist-type-select">
+                            <option value="FIXED">Fixed</option>
+                            <option value="NORMAL">Normal</option>
+                            <option value="UNIFORM">Uniform</option>
+                            <option value="TRIANGULAR">Triangular</option>
+                        </select>
+                        <div id="child-amount-params" class="dist-params"></div>
+                    </div>
+
+                    <h3>Child Stream Parameters</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="child-conversion-rate">Conversion Rate (0-1)</label>
+                            <input type="number" id="child-conversion-rate" value="1.0" min="0" max="1" step="0.01">
+                            <p class="help-text">Fraction of parent events that generate this child.</p>
+                        </div>
+                        <div class="form-group">
+                            <label for="child-trigger-delay">Trigger Delay (months)</label>
+                            <input type="number" id="child-trigger-delay" value="0" min="0">
+                            <p class="help-text">Months after parent event before child fires.</p>
+                        </div>
+                        <div class="form-group">
+                            <label for="child-periodicity">Renewal Period (months, blank = concurrent)</label>
+                            <input type="number" id="child-periodicity" min="1" placeholder="Concurrent">
+                            <p class="help-text">Recurring interval (e.g. 12 = annual renewal).</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" id="btn-cancel-stream" class="btn">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Stream</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Template Modal -->
+    <div id="modal-template" class="modal">
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h2>Load Template</h2>
+                <span class="close" id="close-template-modal">&times;</span>
+            </div>
+            <div id="template-list"></div>
+        </div>
+    </div>
+
+    <script src="js/api-client.js"></script>
+    <script src="js/charts.js"></script>
+    <script src="js/model-builder.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
