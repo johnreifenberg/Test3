@@ -2,7 +2,7 @@ import io
 import json
 import os
 import tempfile
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
@@ -66,6 +66,10 @@ class StreamRequest(BaseModel):
     amount_is_ratio: bool = True
     unit_value: Optional[dict] = None
     market_units: Optional[dict] = None
+
+
+class ReorderRequest(BaseModel):
+    order: List[str]
 
 
 class MonteCarloRequest(BaseModel):
@@ -226,6 +230,16 @@ async def delete_stream(stream_id: str):
         return model.to_dict()
     except ModelValidationError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.put("/streams/reorder")
+async def reorder_streams(req: ReorderRequest):
+    model = _require_model()
+    try:
+        model.reorder_streams(req.order)
+        return model.to_dict()
+    except ModelValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # ── Calculation Endpoints ────────────────────────────────────────────

@@ -23,6 +23,7 @@ function setupEventListeners() {
     document.getElementById('btn-run-monte-carlo').addEventListener('click', runMonteCarlo);
     document.getElementById('btn-run-sensitivity').addEventListener('click', runSensitivity);
     document.getElementById('btn-export-excel').addEventListener('click', exportExcel);
+    document.getElementById('btn-export-pdf').addEventListener('click', exportPDF);
 
     // Tab switching
     document.querySelectorAll('.tab').forEach(tab => {
@@ -314,6 +315,7 @@ function displayDeterministicResults(results) {
 
     chartManager.renderCashflowChart('cashflow-chart', results.cashflows);
     document.getElementById('btn-export-excel').style.display = 'inline-block';
+    document.getElementById('btn-export-pdf').style.display = 'inline-block';
 }
 
 function displayMonteCarloResults(results) {
@@ -409,6 +411,7 @@ function displayMonteCarloResults(results) {
         chartManager.renderNPVDistribution('npv-distribution', distData, isIRR ? 'IRR (%)' : undefined);
     }
     document.getElementById('btn-export-excel').style.display = 'inline-block';
+    document.getElementById('btn-export-pdf').style.display = 'inline-block';
 }
 
 function displaySensitivityResults(results) {
@@ -464,6 +467,64 @@ async function exportExcel() {
         showStatus('Excel exported.');
     } catch (e) {
         alert('Error exporting: ' + e.message);
+    }
+}
+
+async function exportPDF() {
+    const container = document.getElementById('results-container');
+    if (!container || container.querySelector('.placeholder')) {
+        alert('No results to export. Run a calculation first.');
+        return;
+    }
+    showStatus('Generating PDF...');
+    try {
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        const pageW = pdf.internal.pageSize.getWidth();
+        const pageH = pdf.internal.pageSize.getHeight();
+        const margin = 15;
+
+        // Title
+        pdf.setFontSize(20);
+        pdf.text(currentModel ? currentModel.name : 'DCF Report', margin, 20);
+
+        // Date and settings summary
+        pdf.setFontSize(10);
+        pdf.setTextColor(100);
+        const dateStr = new Date().toLocaleDateString();
+        pdf.text(`Generated: ${dateStr}`, margin, 28);
+        if (currentModel && currentModel.settings) {
+            const s = currentModel.settings;
+            pdf.text(`Forecast: ${s.forecast_months} months | Mode: ${s.calculation_mode || 'NPV'}`, margin, 34);
+        }
+        pdf.setTextColor(0);
+
+        // Capture results container
+        const canvas = await html2canvas(container, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+        });
+        const imgData = canvas.toDataURL('image/png');
+        const imgW = pageW - margin * 2;
+        const imgH = (canvas.height / canvas.width) * imgW;
+
+        let yPos = 40;
+        if (imgH <= pageH - yPos - margin) {
+            pdf.addImage(imgData, 'PNG', margin, yPos, imgW, imgH);
+        } else {
+            // Scale to fit page height if needed
+            const fitH = pageH - yPos - margin;
+            const fitW = (canvas.width / canvas.height) * fitH;
+            pdf.addImage(imgData, 'PNG', margin, yPos, Math.min(fitW, imgW), fitH);
+        }
+
+        const modelName = (currentModel ? currentModel.name : 'report').replace(/\s+/g, '_');
+        pdf.save(`${modelName}_report.pdf`);
+        showStatus('PDF exported.');
+    } catch (e) {
+        showStatus('PDF export error: ' + e.message);
+        console.error('PDF export error:', e);
     }
 }
 

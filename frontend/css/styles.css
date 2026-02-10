@@ -95,10 +95,24 @@ header h1 {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     margin-bottom: 8px;
-    cursor: pointer;
     transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 .stream-item:hover { border-color: var(--primary); background: #f0f5ff; }
+.stream-drag-handle {
+    cursor: grab;
+    color: var(--text-secondary);
+    font-size: 1rem;
+    padding: 2px 4px;
+    user-select: none;
+    line-height: 1;
+}
+.stream-drag-handle:active { cursor: grabbing; }
+.stream-content { flex: 1; min-width: 0; }
+.stream-item-ghost { opacity: 0.4; }
+.stream-item-drag { background: var(--surface); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
 .stream-item .stream-name { font-weight: 600; font-size: 0.875rem; }
 .stream-item .stream-meta {
     font-size: 0.75rem;
@@ -109,6 +123,13 @@ header h1 {
     display: flex;
     gap: 6px;
     margin-top: 6px;
+}
+.currency-preview {
+    font-size: 0.8rem;
+    color: var(--primary);
+    font-weight: 500;
+    margin-top: 1px;
+    min-height: 16px;
 }
 .stream-type-badge {
     display: inline-block;

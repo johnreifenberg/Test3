@@ -48,18 +48,31 @@ class FinancialModel:
         self.name: str = name
         self.settings: ModelSettings = settings or ModelSettings()
         self.streams: Dict[str, Stream] = {}
+        self.stream_order: List[str] = []
 
     def add_stream(self, stream: Stream) -> None:
         self.streams[stream.id] = stream
+        if stream.id not in self.stream_order:
+            self.stream_order.append(stream.id)
 
     def remove_stream(self, stream_id: str) -> None:
         if stream_id not in self.streams:
             raise ModelValidationError(f"Stream '{stream_id}' not found")
         del self.streams[stream_id]
+        if stream_id in self.stream_order:
+            self.stream_order.remove(stream_id)
         # Clear parent references from children of the removed stream
         for stream in self.streams.values():
             if stream.parent_stream_id == stream_id:
                 stream.parent_stream_id = None
+
+    def reorder_streams(self, new_order: List[str]) -> None:
+        for sid in new_order:
+            if sid not in self.streams:
+                raise ModelValidationError(f"Stream '{sid}' not found in model")
+        if set(new_order) != set(self.streams.keys()):
+            raise ModelValidationError("Order list must include all streams exactly once")
+        self.stream_order = new_order
 
     def get_children(self, parent_id: str) -> List[Stream]:
         return [s for s in self.streams.values() if s.parent_stream_id == parent_id]
@@ -140,10 +153,18 @@ class FinancialModel:
         return order
 
     def to_dict(self) -> dict:
+        ordered = []
+        for sid in self.stream_order:
+            if sid in self.streams:
+                ordered.append(self.streams[sid].to_dict())
+        for sid, s in self.streams.items():
+            if sid not in self.stream_order:
+                ordered.append(s.to_dict())
         return {
             "name": self.name,
             "settings": self.settings.to_dict(),
-            "streams": [s.to_dict() for s in self.streams.values()],
+            "streams": ordered,
+            "stream_order": list(self.stream_order),
         }
 
     @classmethod
@@ -154,4 +175,6 @@ class FinancialModel:
         )
         for s_data in data.get("streams", []):
             model.add_stream(Stream.from_dict(s_data))
+        if "stream_order" in data:
+            model.stream_order = data["stream_order"]
         return model

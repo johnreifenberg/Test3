@@ -1,3 +1,24 @@
+/* ── Currency Formatting Helpers ────────────────────────────────── */
+const CURRENCY_KEYS = new Set(['value', 'mean', 'min', 'max', 'likely']);
+
+function attachCurrencyPreview(inputId) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    let preview = input.nextElementSibling;
+    if (!preview || !preview.classList.contains('currency-preview')) {
+        preview = document.createElement('div');
+        preview.className = 'currency-preview';
+        input.parentNode.insertBefore(preview, input.nextSibling);
+    }
+    const update = () => {
+        const num = parseFloat(input.value);
+        preview.textContent = isNaN(num) ? '' : '$' + num.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    };
+    input.addEventListener('input', update);
+    input.addEventListener('blur', update);
+    update();
+}
+
 /* ── Distribution parameter templates ───────────────────────────── */
 const DIST_PARAMS = {
     FIXED:       [{ key: 'value', label: 'Value', default: 100000 }],
@@ -46,6 +67,7 @@ function renderDistParams(containerId, distType, prefix, existingParams, labelOv
     const container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = '';
+    const isCurrency = prefix === 'amount';
     const params = DIST_PARAMS[distType] || [];
     params.forEach(p => {
         const val = existingParams && existingParams[p.key] !== undefined ? existingParams[p.key] : p.default;
@@ -57,6 +79,9 @@ function renderDistParams(containerId, distType, prefix, existingParams, labelOv
             <input type="number" id="${prefix}-${p.key}" value="${val}" step="any">
         `;
         container.appendChild(div);
+        if (isCurrency && CURRENCY_KEYS.has(p.key)) {
+            setTimeout(() => attachCurrencyPreview(`${prefix}-${p.key}`), 0);
+        }
     });
 }
 
@@ -75,6 +100,9 @@ function renderChildDistParams(containerId, distType, prefix, existingParams, is
             <input type="number" id="${prefix}-${p.key}" value="${val}" step="any">
         `;
         container.appendChild(div);
+        if (!isRatio && CURRENCY_KEYS.has(p.key)) {
+            setTimeout(() => attachCurrencyPreview(`${prefix}-${p.key}`), 0);
+        }
     });
 }
 
@@ -102,6 +130,7 @@ function renderSpecificDistParams(containerId, distType, prefix, existingParams,
     const container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = '';
+    const isCurrency = prefix === 'unit-value' || prefix === 'market-units';
     const params = paramSet[distType] || [];
     params.forEach(p => {
         const val = existingParams && existingParams[p.key] !== undefined ? existingParams[p.key] : p.default;
@@ -112,6 +141,9 @@ function renderSpecificDistParams(containerId, distType, prefix, existingParams,
             <input type="number" id="${prefix}-${p.key}" value="${val}" step="any">
         `;
         container.appendChild(div);
+        if (isCurrency && CURRENCY_KEYS.has(p.key)) {
+            setTimeout(() => attachCurrencyPreview(`${prefix}-${p.key}`), 0);
+        }
     });
 }
 
@@ -176,18 +208,51 @@ function renderStreamList(model) {
 
         const div = document.createElement('div');
         div.className = 'stream-item';
+        div.setAttribute('data-stream-id', stream.id);
         div.innerHTML = `
-            <div class="stream-name">
-                <span class="stream-type-badge ${badgeClass}">${stream.stream_type}</span>
-                ${stream.name}
+            <div class="stream-drag-handle" title="Drag to reorder">\u22EE\u22EE</div>
+            <div class="stream-content">
+                <div class="stream-name">
+                    <span class="stream-type-badge ${badgeClass}">${stream.stream_type}</span>
+                    ${stream.name}
+                </div>
+                <div class="stream-meta">Month ${stream.start_month} - ${endLabel}${parentLabel}</div>
             </div>
-            <div class="stream-meta">Month ${stream.start_month} - ${endLabel}${parentLabel}</div>
             <div class="stream-actions">
                 <button class="btn btn-sm" onclick="editStream('${stream.id}')">Edit</button>
+                <button class="btn btn-sm" onclick="duplicateStream('${stream.id}')">Clone</button>
                 <button class="btn btn-sm btn-danger" onclick="deleteStream('${stream.id}')">Delete</button>
             </div>
         `;
         container.appendChild(div);
+    });
+
+    initStreamSortable();
+}
+
+let sortableInstance = null;
+
+function initStreamSortable() {
+    const container = document.getElementById('stream-list');
+    if (!container || typeof Sortable === 'undefined') return;
+    if (sortableInstance) sortableInstance.destroy();
+    if (!container.querySelector('.stream-item')) return;
+
+    sortableInstance = Sortable.create(container, {
+        animation: 150,
+        handle: '.stream-drag-handle',
+        ghostClass: 'stream-item-ghost',
+        dragClass: 'stream-item-drag',
+        onEnd: async function () {
+            const items = container.querySelectorAll('.stream-item');
+            const newOrder = Array.from(items).map(el => el.getAttribute('data-stream-id'));
+            try {
+                currentModel = await api.put('/streams/reorder', { order: newOrder });
+            } catch (e) {
+                alert('Error reordering: ' + e.message);
+                renderModel();
+            }
+        }
     });
 }
 
@@ -348,6 +413,45 @@ async function deleteStream(streamId) {
         renderModel();
     } catch (e) {
         alert('Error deleting stream: ' + e.message);
+    }
+}
+
+async function duplicateStream(streamId) {
+    if (!currentModel) return;
+    const streams = Array.isArray(currentModel.streams) ? currentModel.streams : Object.values(currentModel.streams);
+    const src = streams.find(s => s.id === streamId);
+    if (!src) { alert('Stream not found.'); return; }
+
+    let copyId = streamId + '_copy';
+    let counter = 1;
+    while (streams.some(s => s.id === copyId)) {
+        copyId = `${streamId}_copy${counter}`;
+        counter++;
+    }
+
+    const data = {
+        id: copyId,
+        name: src.name + ' (Copy)',
+        stream_type: src.stream_type,
+        start_month: src.start_month,
+        end_month: src.end_month,
+        amount: src.amount,
+        adoption_curve: src.adoption_curve,
+        parent_stream_id: src.parent_stream_id,
+        conversion_rate: src.conversion_rate,
+        trigger_delay_months: src.trigger_delay_months,
+        periodicity_months: src.periodicity_months,
+        amount_is_ratio: src.amount_is_ratio,
+        unit_value: src.unit_value,
+        market_units: src.market_units,
+    };
+
+    try {
+        currentModel = await api.post('/streams', data);
+        renderModel();
+        showStatus(`Stream "${src.name}" cloned.`);
+    } catch (e) {
+        alert('Error duplicating stream: ' + e.message);
     }
 }
 

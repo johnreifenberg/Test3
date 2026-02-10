@@ -208,3 +208,81 @@ class TestCalculationMode:
         }
         settings = ModelSettings.from_dict(data)
         assert settings.calculation_mode == "NPV"
+
+
+class TestStreamOrdering:
+    def test_stream_order_maintained_on_add(self):
+        model = FinancialModel("Test")
+        model.add_stream(make_stream("a"))
+        model.add_stream(make_stream("b"))
+        model.add_stream(make_stream("c"))
+        assert model.stream_order == ["a", "b", "c"]
+
+    def test_stream_order_maintained_on_remove(self):
+        model = FinancialModel("Test")
+        model.add_stream(make_stream("a"))
+        model.add_stream(make_stream("b"))
+        model.add_stream(make_stream("c"))
+        model.remove_stream("b")
+        assert model.stream_order == ["a", "c"]
+
+    def test_reorder_streams(self):
+        model = FinancialModel("Test")
+        model.add_stream(make_stream("a"))
+        model.add_stream(make_stream("b"))
+        model.add_stream(make_stream("c"))
+        model.reorder_streams(["c", "a", "b"])
+        assert model.stream_order == ["c", "a", "b"]
+
+    def test_reorder_with_invalid_id_raises(self):
+        model = FinancialModel("Test")
+        model.add_stream(make_stream("a"))
+        model.add_stream(make_stream("b"))
+        with pytest.raises(ModelValidationError, match="not found"):
+            model.reorder_streams(["a", "b", "missing"])
+
+    def test_reorder_with_missing_stream_raises(self):
+        model = FinancialModel("Test")
+        model.add_stream(make_stream("a"))
+        model.add_stream(make_stream("b"))
+        with pytest.raises(ModelValidationError, match="all streams exactly once"):
+            model.reorder_streams(["a"])
+
+    def test_stream_order_serialization(self):
+        model = FinancialModel("Test")
+        model.add_stream(make_stream("x"))
+        model.add_stream(make_stream("y"))
+        model.add_stream(make_stream("z"))
+        model.reorder_streams(["z", "x", "y"])
+        data = model.to_dict()
+        assert data["stream_order"] == ["z", "x", "y"]
+        # Streams list should be in display order
+        stream_ids = [s["id"] for s in data["streams"]]
+        assert stream_ids == ["z", "x", "y"]
+
+    def test_stream_order_deserialization(self):
+        model = FinancialModel("Test")
+        model.add_stream(make_stream("a"))
+        model.add_stream(make_stream("b"))
+        model.reorder_streams(["b", "a"])
+        data = model.to_dict()
+        restored = FinancialModel.from_dict(data)
+        assert restored.stream_order == ["b", "a"]
+
+    def test_backward_compat_no_stream_order(self):
+        """Old JSON files without stream_order should still load."""
+        data = {
+            "name": "Old Model",
+            "settings": {
+                "forecast_months": 60,
+                "discount_rate": {"type": "FIXED", "params": {"value": 0.10}},
+                "terminal_growth_rate": 0.025,
+            },
+            "streams": [
+                {"id": "s1", "name": "S1", "stream_type": "REVENUE", "start_month": 0,
+                 "amount": {"type": "FIXED", "params": {"value": 100}}},
+            ],
+        }
+        model = FinancialModel.from_dict(data)
+        assert "s1" in model.streams
+        assert "s1" in model.stream_order
