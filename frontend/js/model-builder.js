@@ -221,14 +221,14 @@ function updateFormulaBar() {
     }
 }
 
-function updateChildAmountLabels() {
+function updateChildAmountLabels(existingParams) {
     const isRatio = document.getElementById('amount-is-ratio').checked;
     document.getElementById('child-amount-heading').textContent = isRatio ? 'Price Ratio' : 'Absolute Value';
     document.getElementById('child-amount-help').textContent = isRatio
         ? 'Fraction of the parent stream\'s value. Use a distribution to model uncertainty.'
         : 'Fixed dollar amount per event. Use a distribution to model uncertainty.';
     const distType = document.getElementById('child-amount-dist-type').value;
-    renderChildDistParams('child-amount-params', distType, 'child-amount', null, isRatio);
+    renderChildDistParams('child-amount-params', distType, 'child-amount', existingParams || null, isRatio);
     updateFormulaBar();
 }
 
@@ -266,12 +266,10 @@ function showStreamModal(streamId = null) {
                 // Child stream
                 document.getElementById('amount-is-ratio').checked = stream.amount_is_ratio !== false;
                 document.getElementById('child-amount-dist-type').value = stream.amount.type;
-                const isRatio = stream.amount_is_ratio !== false;
-                renderChildDistParams('child-amount-params', stream.amount.type, 'child-amount', stream.amount.params, isRatio);
                 document.getElementById('child-conversion-rate').value = stream.conversion_rate ?? 1.0;
                 document.getElementById('child-trigger-delay').value = stream.trigger_delay_months ?? 0;
                 document.getElementById('child-periodicity').value = stream.periodicity_months ?? '';
-                updateChildAmountLabels();
+                updateChildAmountLabels(stream.amount.params);
             } else {
                 // Root stream - detect unit value mode
                 if (stream.unit_value && stream.market_units) {
@@ -459,6 +457,8 @@ function renderCashflowsTab(model) {
             html += stream.periodicity_months ? `Renews every ${stream.periodicity_months}mo` : 'Concurrent';
             html += `</p>`;
             html += `<p class="text-muted">Amount: ${stream.amount_is_ratio ? 'Ratio' : 'Absolute'} ${stream.amount.type} ${JSON.stringify(stream.amount.params)}</p>`;
+            html += `<button class="btn btn-sm" onclick="previewChildCashflow('${stream.id}')">Preview Cashflow</button>`;
+            html += `<div class="preview-canvas-container"><canvas id="preview-${stream.id}-cashflow" height="150"></canvas></div>`;
         } else {
             if (stream.unit_value && stream.market_units) {
                 html += `<p class="text-muted">Unit Value: ${stream.unit_value.type} ${JSON.stringify(stream.unit_value.params)}</p>`;
@@ -503,6 +503,19 @@ async function runCombinedPreview() {
                 type: s.stream_type,
             }));
             chartManager.renderCombinedCashflowChart('combined-cashflow-chart', results.stream_details, streamMeta);
+        }
+    } catch (e) {
+        alert('Error generating preview: ' + e.message);
+    }
+}
+
+async function previewChildCashflow(streamId) {
+    try {
+        const results = await api.post('/calculate/deterministic');
+        if (results && results.stream_details && results.stream_details[streamId]) {
+            const cfs = results.stream_details[streamId];
+            const previewData = cfs.map((v, i) => ({ month: i, value: v }));
+            chartManager.renderDistributionPreview(`preview-${streamId}-cashflow`, previewData);
         }
     } catch (e) {
         alert('Error generating preview: ' + e.message);
