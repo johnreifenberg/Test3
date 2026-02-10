@@ -217,11 +217,11 @@ function renderStreamList(model) {
                     ${stream.name}
                 </div>
                 <div class="stream-meta">Month ${stream.start_month} - ${endLabel}${parentLabel}</div>
-            </div>
-            <div class="stream-actions">
-                <button class="btn btn-sm" onclick="editStream('${stream.id}')">Edit</button>
-                <button class="btn btn-sm" onclick="duplicateStream('${stream.id}')">Clone</button>
-                <button class="btn btn-sm btn-danger" onclick="deleteStream('${stream.id}')">Delete</button>
+                <div class="stream-actions">
+                    <button class="btn btn-sm" onclick="editStream('${stream.id}')">Edit</button>
+                    <button class="btn btn-sm" onclick="duplicateStream('${stream.id}')">Clone</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteStream('${stream.id}')">Delete</button>
+                </div>
             </div>
         `;
         container.appendChild(div);
