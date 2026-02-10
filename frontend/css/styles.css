@@ -121,8 +121,9 @@ header h1 {
 }
 .stream-item .stream-actions {
     display: flex;
-    gap: 6px;
-    margin-top: 6px;
+    gap: 4px;
+    flex-shrink: 0;
+    align-items: center;
 }
 .currency-preview {
     font-size: 0.8rem;

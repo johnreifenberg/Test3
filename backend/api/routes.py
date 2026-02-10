@@ -165,6 +165,16 @@ async def load_template(name: str):
 
 
 # ── Stream Operations ────────────────────────────────────────────────
+@router.put("/streams/reorder")
+async def reorder_streams(req: ReorderRequest):
+    model = _require_model()
+    try:
+        model.reorder_streams(req.order)
+        return model.to_dict()
+    except ModelValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.post("/streams")
 async def add_stream(req: StreamRequest):
     model = _require_model()
@@ -230,16 +240,6 @@ async def delete_stream(stream_id: str):
         return model.to_dict()
     except ModelValidationError as e:
         raise HTTPException(status_code=404, detail=str(e))
-
-
-@router.put("/streams/reorder")
-async def reorder_streams(req: ReorderRequest):
-    model = _require_model()
-    try:
-        model.reorder_streams(req.order)
-        return model.to_dict()
-    except ModelValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
 
 
 # ── Calculation Endpoints ────────────────────────────────────────────
