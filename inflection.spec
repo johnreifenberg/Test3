@@ -31,6 +31,7 @@ a = Analysis(
         'backend.engine.calculator',
         'backend.engine.distributions',
         'backend.engine.sensitivity',
+        'backend.engine.breakeven',
         'backend.engine.terminal_value',
         'backend.models',
         'backend.models.model',

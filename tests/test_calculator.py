@@ -521,6 +521,86 @@ class TestTerminalValue:
         assert tv == 0.0
 
 
+class TestPaybackPeriod:
+    def test_payback_with_upfront_cost(self):
+        """Model with upfront cost then revenue should have a payback period."""
+        model = FinancialModel(
+            "Test",
+            ModelSettings(
+                forecast_months=24,
+                discount_rate=Distribution(DistributionType.FIXED, {"value": 0.12}),
+                terminal_growth_rate=0.025,
+            ),
+        )
+        model.add_stream(Stream(
+            id="cost",
+            name="Investment",
+            stream_type=StreamType.COST,
+            start_month=0,
+            end_month=0,
+            amount=Distribution(DistributionType.FIXED, {"value": 100000}),
+        ))
+        model.add_stream(Stream(
+            id="rev",
+            name="Revenue",
+            stream_type=StreamType.REVENUE,
+            start_month=1,
+            amount=Distribution(DistributionType.FIXED, {"value": 10000}),
+        ))
+        calc = DCFCalculator(model)
+        result = calc.run_deterministic()
+        payback = result["payback_period"]
+        assert payback is not None
+        assert 9 < payback < 12  # ~10 months to recover 100k at 10k/mo discounted
+
+    def test_payback_never(self):
+        """All-revenue model never crosses zero from negative to positive."""
+        model = make_simple_model()
+        calc = DCFCalculator(model)
+        result = calc.run_deterministic()
+        # No upfront cost, cumulative is always positive, never goes negative then positive
+        assert result["payback_period"] is None
+
+    def test_payback_static_method(self):
+        """Direct test of calculate_payback_period."""
+        cashflows = np.array([-100.0, 30.0, 30.0, 30.0, 30.0])
+        payback = DCFCalculator.calculate_payback_period(cashflows, 0.12)
+        assert payback is not None
+        assert 3 < payback < 5
+
+    def test_payback_monte_carlo(self):
+        """Monte Carlo NPV mode should include payback stats."""
+        model = FinancialModel(
+            "Test",
+            ModelSettings(
+                forecast_months=24,
+                discount_rate=Distribution(DistributionType.FIXED, {"value": 0.12}),
+                terminal_growth_rate=0.025,
+            ),
+        )
+        model.add_stream(Stream(
+            id="cost",
+            name="Investment",
+            stream_type=StreamType.COST,
+            start_month=0,
+            end_month=0,
+            amount=Distribution(DistributionType.FIXED, {"value": 100000}),
+        ))
+        model.add_stream(Stream(
+            id="rev",
+            name="Revenue",
+            stream_type=StreamType.REVENUE,
+            start_month=1,
+            amount=Distribution(DistributionType.NORMAL, {"mean": 10000, "std": 500}),
+        ))
+        calc = DCFCalculator(model)
+        result = calc.run_monte_carlo(n_simulations=50)
+        assert "payback_mean" in result
+        assert "payback_never_count" in result
+        assert result["payback_mean"] is not None
+        assert result["payback_mean"] > 0
+
+
 class TestNPVandIRR:
     def test_npv_calculation(self):
         calc = DCFCalculator(make_simple_model())

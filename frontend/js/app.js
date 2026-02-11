@@ -22,6 +22,8 @@ function setupEventListeners() {
     document.getElementById('btn-run-deterministic').addEventListener('click', runDeterministic);
     document.getElementById('btn-run-monte-carlo').addEventListener('click', runMonteCarlo);
     document.getElementById('btn-run-sensitivity').addEventListener('click', runSensitivity);
+    document.getElementById('btn-load-breakeven-params').addEventListener('click', loadBreakevenParams);
+    document.getElementById('btn-run-breakeven').addEventListener('click', runBreakeven);
     document.getElementById('btn-export-excel').addEventListener('click', exportExcel);
     document.getElementById('btn-export-pdf').addEventListener('click', exportPDF);
 
@@ -282,6 +284,8 @@ function displayDeterministicResults(results) {
             `;
         }
     } else {
+        const paybackDisplay = results.payback_period !== null && results.payback_period !== undefined
+            ? results.payback_period.toFixed(1) + ' months' : 'Never';
         cardsHTML = `
             <div class="result-card">
                 <div class="label">Net Present Value</div>
@@ -298,6 +302,10 @@ function displayDeterministicResults(results) {
             <div class="result-card">
                 <div class="label">Discount Rate</div>
                 <div class="value">${formatPercent(results.discount_rate)}</div>
+            </div>
+            <div class="result-card">
+                <div class="label">Payback Period</div>
+                <div class="value">${paybackDisplay}</div>
             </div>
         `;
     }
@@ -362,6 +370,36 @@ function displayMonteCarloResults(results) {
         chartTitle = 'IRR Distribution';
         distData = results.irr_distribution || [];
     } else {
+        const formatPayback = (v) => v !== null && v !== undefined ? v.toFixed(1) + ' mo' : 'N/A';
+        let paybackCards = '';
+        if (results.payback_mean !== null && results.payback_mean !== undefined) {
+            paybackCards = `
+                <div class="result-card">
+                    <div class="label">Payback Mean</div>
+                    <div class="value">${formatPayback(results.payback_mean)}</div>
+                </div>
+                <div class="result-card">
+                    <div class="label">Payback Median</div>
+                    <div class="value">${formatPayback(results.payback_median)}</div>
+                </div>
+                <div class="result-card">
+                    <div class="label">Payback P10</div>
+                    <div class="value">${formatPayback(results.payback_p10)}</div>
+                </div>
+                <div class="result-card">
+                    <div class="label">Payback P90</div>
+                    <div class="value">${formatPayback(results.payback_p90)}</div>
+                </div>
+            `;
+        }
+        if (results.payback_never_count > 0) {
+            paybackCards += `
+                <div class="result-card">
+                    <div class="label">Never Pays Back</div>
+                    <div class="value">${results.payback_never_count}</div>
+                </div>
+            `;
+        }
         cardsHTML = `
             <div class="result-card">
                 <div class="label">NPV Mean</div>
@@ -391,6 +429,7 @@ function displayMonteCarloResults(results) {
                 <div class="label">P90</div>
                 <div class="value">${formatCurrency(results.npv_p90)}</div>
             </div>
+            ${paybackCards}
         `;
         chartTitle = 'NPV Distribution';
         distData = results.npv_distribution || [];
@@ -458,6 +497,69 @@ function displaySensitivityResults(results) {
     `;
 
     chartManager.renderTornadoChart('tornado-chart', results.parameters);
+}
+
+/* ── Breakeven Analysis ────────────────────────────────────────── */
+let breakevenParams = [];
+
+async function loadBreakevenParams() {
+    if (!currentModel) { alert('No model loaded.'); return; }
+    try {
+        breakevenParams = await api.get('/calculate/breakeven/parameters');
+        const select = document.getElementById('breakeven-param');
+        select.innerHTML = '';
+        if (breakevenParams.length === 0) {
+            select.innerHTML = '<option value="">No solvable parameters</option>';
+            return;
+        }
+        breakevenParams.forEach((p, i) => {
+            const opt = document.createElement('option');
+            opt.value = i;
+            opt.textContent = p.parameter_name;
+            select.appendChild(opt);
+        });
+        showStatus(`Loaded ${breakevenParams.length} breakeven parameters.`);
+    } catch (e) {
+        showStatus('Error loading parameters: ' + e.message);
+    }
+}
+
+async function runBreakeven() {
+    if (!currentModel) { alert('No model loaded.'); return; }
+    const select = document.getElementById('breakeven-param');
+    const idx = parseInt(select.value);
+    if (isNaN(idx) || !breakevenParams[idx]) {
+        alert('Select a parameter first. Click "Load Parameters".');
+        return;
+    }
+    const param = breakevenParams[idx];
+    const targetNpv = parseFloat(document.getElementById('breakeven-target').value) || 0;
+    showStatus('Running breakeven analysis...');
+    try {
+        const result = await api.post('/calculate/breakeven', {
+            stream_id: param.stream_id,
+            parameter_name: param.parameter_name,
+            target_npv: targetNpv,
+        });
+        const container = document.getElementById('breakeven-result');
+        if (result.found) {
+            const isPercent = param.parameter_name === 'Discount Rate' || param.parameter_name === 'Escalation Rate';
+            const fmtVal = isPercent ? formatPercent(result.breakeven_value) : formatCurrency(result.breakeven_value);
+            const fmtOrig = isPercent ? formatPercent(result.original_value) : formatCurrency(result.original_value);
+            container.innerHTML = `
+                <div class="result-card" style="margin-top:8px;">
+                    <div class="label">Breakeven: ${param.parameter_name}</div>
+                    <div class="value">${fmtVal}</div>
+                    <div class="label" style="margin-top:4px;">Current value: ${fmtOrig} | Target NPV: ${formatCurrency(targetNpv)}</div>
+                </div>
+            `;
+        } else {
+            container.innerHTML = `<p style="color:var(--danger);">${result.error || 'No breakeven found.'}</p>`;
+        }
+        showStatus('Breakeven analysis complete.');
+    } catch (e) {
+        showStatus('Error: ' + e.message);
+    }
 }
 
 /* ── Export ─────────────────────────────────────────────────────── */

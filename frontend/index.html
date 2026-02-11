@@ -134,6 +134,23 @@
                         <p>Identify which inputs matter most with tornado charts.</p>
                         <button id="btn-run-sensitivity" class="btn btn-primary btn-lg">Run Sensitivity</button>
                     </div>
+                    <div class="calc-section">
+                        <h3>Breakeven Analysis</h3>
+                        <p>Find the parameter value that drives NPV to a target.</p>
+                        <div class="form-inline">
+                            <label for="breakeven-param">Parameter:</label>
+                            <select id="breakeven-param">
+                                <option value="">Load parameters...</option>
+                            </select>
+                        </div>
+                        <div class="form-inline">
+                            <label for="breakeven-target">Target NPV ($):</label>
+                            <input type="number" id="breakeven-target" value="0" step="1000">
+                        </div>
+                        <button id="btn-load-breakeven-params" class="btn btn-sm">Load Parameters</button>
+                        <button id="btn-run-breakeven" class="btn btn-primary btn-lg">Run Breakeven</button>
+                        <div id="breakeven-result" style="margin-top:8px;"></div>
+                    </div>
                 </div>
                 <div id="calculation-status" class="status-bar"></div>
             </div>

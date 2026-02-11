@@ -18,6 +18,7 @@ from backend.models.model import (
 from backend.engine.distributions import DistributionEngine
 from backend.engine.calculator import DCFCalculator
 from backend.engine.sensitivity import SensitivityAnalyzer
+from backend.engine.breakeven import BreakevenAnalyzer
 from backend.services.persistence import save_model, load_model, get_model_templates
 from backend.services.excel_export import ExcelExporter
 
@@ -74,6 +75,12 @@ class ReorderRequest(BaseModel):
 
 class MonteCarloRequest(BaseModel):
     n_simulations: int = 10000
+
+
+class BreakevenRequest(BaseModel):
+    stream_id: str
+    parameter_name: str
+    target_npv: float = 0.0
 
 
 class PreviewDistributionRequest(BaseModel):
@@ -280,6 +287,36 @@ async def run_sensitivity():
     results = analyzer.run_tornado_analysis()
     session.last_sensitivity = results
     return results
+
+
+@router.get("/calculate/breakeven/parameters")
+async def get_breakeven_parameters():
+    model = _require_model()
+    try:
+        model.validate()
+    except ModelValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    analyzer = BreakevenAnalyzer(model)
+    params = analyzer.get_solvable_parameters()
+    return [
+        {
+            "stream_id": p["stream_id"],
+            "stream_name": p["stream_name"],
+            "parameter_name": p["parameter_name"],
+        }
+        for p in params
+    ]
+
+
+@router.post("/calculate/breakeven")
+async def run_breakeven(req: BreakevenRequest):
+    model = _require_model()
+    try:
+        model.validate()
+    except ModelValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    analyzer = BreakevenAnalyzer(model)
+    return analyzer.run_breakeven(req.stream_id, req.parameter_name, req.target_npv)
 
 
 # ── Utility Endpoints ────────────────────────────────────────────────

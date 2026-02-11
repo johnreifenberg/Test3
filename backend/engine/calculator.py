@@ -17,6 +17,25 @@ class DCFCalculator:
         self.model = model
         self.n_months = model.settings.forecast_months
 
+    @staticmethod
+    def calculate_payback_period(cashflows: np.ndarray, discount_rate: float) -> Optional[float]:
+        """Find the month where cumulative discounted cashflows cross zero.
+
+        Returns fractional month via linear interpolation, or None if never crosses.
+        """
+        monthly_rate = discount_rate / 12
+        cumulative = 0.0
+        prev_cumulative = 0.0
+        for m in range(len(cashflows)):
+            discount_factor = 1.0 / (1 + monthly_rate) ** m
+            cumulative += cashflows[m] * discount_factor
+            if m > 0 and prev_cumulative < 0 and cumulative >= 0:
+                # Linear interpolation between month m-1 and m
+                fraction = (-prev_cumulative) / (cumulative - prev_cumulative)
+                return (m - 1) + fraction
+            prev_cumulative = cumulative
+        return None
+
     def _sample_escalation(self, deterministic: bool) -> Optional[float]:
         """Sample or get deterministic escalation rate (annual)."""
         esc = self.model.settings.escalation_rate
@@ -245,6 +264,9 @@ class DCFCalculator:
         # IRR (informational)
         irr, irr_error = self.calculate_irr(total_cashflows)
 
+        # Payback period
+        payback = self.calculate_payback_period(total_cashflows, discount_rate)
+
         return {
             "mode": "deterministic",
             "calculation_mode": "NPV",
@@ -253,6 +275,7 @@ class DCFCalculator:
             "irr_error": irr_error,
             "terminal_value": terminal_value_total,
             "discount_rate": discount_rate,
+            "payback_period": payback,
             "cashflows": total_cashflows.tolist(),
             "stream_details": {
                 sid: cfs.tolist() for sid, cfs in stream_cashflows.items()
@@ -287,6 +310,7 @@ class DCFCalculator:
 
     def _run_monte_carlo_npv(self, n_simulations: int) -> dict:
         npv_results = []
+        payback_results = []
         all_cashflows = []
 
         discount_dist = self.model.settings.discount_rate
@@ -314,10 +338,32 @@ class DCFCalculator:
                 npv += tv
 
             npv_results.append(npv)
+            payback_results.append(self.calculate_payback_period(total_cashflows, dr))
             all_cashflows.append(total_cashflows.tolist())
 
         npv_arr = np.array(npv_results)
         cashflow_arr = np.array(all_cashflows)
+
+        # Payback period stats (exclude None = never pays back)
+        valid_paybacks = [p for p in payback_results if p is not None]
+        payback_never_count = len(payback_results) - len(valid_paybacks)
+        payback_stats = {}
+        if valid_paybacks:
+            pb_arr = np.array(valid_paybacks)
+            payback_stats = {
+                "payback_mean": float(np.mean(pb_arr)),
+                "payback_median": float(np.median(pb_arr)),
+                "payback_p10": float(np.percentile(pb_arr, 10)),
+                "payback_p90": float(np.percentile(pb_arr, 90)),
+            }
+        else:
+            payback_stats = {
+                "payback_mean": None,
+                "payback_median": None,
+                "payback_p10": None,
+                "payback_p90": None,
+            }
+        payback_stats["payback_never_count"] = payback_never_count
 
         # Cashflow distribution stats per month
         cashflow_distributions = []
@@ -331,7 +377,7 @@ class DCFCalculator:
                 "p90": float(np.percentile(month_cfs, 90)),
             })
 
-        return {
+        result = {
             "mode": "monte_carlo",
             "calculation_mode": "NPV",
             "n_simulations": n_simulations,
@@ -345,6 +391,8 @@ class DCFCalculator:
             "npv_distribution": npv_arr.tolist(),
             "cashflow_distributions": cashflow_distributions,
         }
+        result.update(payback_stats)
+        return result
 
     def _run_monte_carlo_irr(self, n_simulations: int) -> dict:
         irr_results = []

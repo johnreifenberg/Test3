@@ -65,6 +65,14 @@ class ExcelExporter:
                 row += 1
                 ws.cell(row=row, column=1, value="Terminal Value")
                 ws.cell(row=row, column=2, value=self.results.get("terminal_value", 0)).number_format = self.currency_fmt
+                row += 1
+                payback = self.results.get("payback_period")
+                ws.cell(row=row, column=1, value="Payback Period")
+                if payback is not None:
+                    ws.cell(row=row, column=2, value=round(payback, 1)).number_format = "0.0"
+                    ws.cell(row=row, column=3, value="months")
+                else:
+                    ws.cell(row=row, column=2, value="Never")
         elif mode == "monte_carlo":
             if calc_mode == "IRR":
                 stats = [
@@ -101,6 +109,24 @@ class ExcelExporter:
                     row += 1
                     ws.cell(row=row, column=1, value=label)
                     ws.cell(row=row, column=2, value=self.results.get(key, 0)).number_format = self.currency_fmt
+                # Payback period stats
+                payback_mean = self.results.get("payback_mean")
+                if payback_mean is not None:
+                    for label, key in [("Payback Mean", "payback_mean"), ("Payback Median", "payback_median"),
+                                       ("Payback P10", "payback_p10"), ("Payback P90", "payback_p90")]:
+                        row += 1
+                        ws.cell(row=row, column=1, value=label)
+                        val = self.results.get(key)
+                        if val is not None:
+                            ws.cell(row=row, column=2, value=round(val, 1)).number_format = "0.0"
+                            ws.cell(row=row, column=3, value="months")
+                        else:
+                            ws.cell(row=row, column=2, value="N/A")
+                never_count = self.results.get("payback_never_count", 0)
+                if never_count > 0:
+                    row += 1
+                    ws.cell(row=row, column=1, value="Payback Never Count")
+                    ws.cell(row=row, column=2, value=never_count)
 
         # Assumptions
         row += 2
