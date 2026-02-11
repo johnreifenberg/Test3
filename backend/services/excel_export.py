@@ -281,12 +281,40 @@ class ExcelExporter:
             ws.cell(row=hist_start + 1, column=col, value=h)
         self._style_header_row(ws, hist_start + 1, 3)
 
-        counts, bin_edges = np.histogram(dist_data, bins=50)
+        # IQR-based trimmed range (wide Tukey fences: 3×IQR)
+        q1 = float(np.percentile(dist_data, 25))
+        q3 = float(np.percentile(dist_data, 75))
+        iqr = q3 - q1
+        fence_low = max(float(dist_data.min()), q1 - 3 * iqr)
+        fence_high = min(float(dist_data.max()), q3 + 3 * iqr)
+
+        # Adaptive bin count: Rice rule capped at 50
+        n_bins = min(50, max(5, int(np.ceil(2 * len(dist_data) ** (1 / 3)))))
+
+        trimmed = dist_data[(dist_data >= fence_low) & (dist_data <= fence_high)]
+        counts, bin_edges = np.histogram(trimmed, bins=n_bins, range=(fence_low, fence_high))
+
+        # Count outliers folded into edge bins
+        low_outliers = int(np.sum(dist_data < fence_low))
+        high_outliers = int(np.sum(dist_data > fence_high))
+        counts[0] += low_outliers
+        counts[-1] += high_outliers
+
         for i, count in enumerate(counts):
             row = hist_start + 2 + i
             ws.cell(row=row, column=1, value=float(bin_edges[i])).number_format = value_fmt
             ws.cell(row=row, column=2, value=float(bin_edges[i + 1])).number_format = value_fmt
             ws.cell(row=row, column=3, value=int(count))
+
+        # Note about outliers if any were folded in
+        if low_outliers > 0 or high_outliers > 0:
+            note_row = hist_start + 2 + len(counts) + 1
+            parts = []
+            if low_outliers > 0:
+                parts.append(f"{low_outliers} below fence")
+            if high_outliers > 0:
+                parts.append(f"{high_outliers} above fence")
+            ws.cell(row=note_row, column=1, value=f"Outliers folded into edge bins: {', '.join(parts)}")
 
         ws.column_dimensions["A"].width = 18
         ws.column_dimensions["B"].width = 18

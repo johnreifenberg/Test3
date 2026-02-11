@@ -167,7 +167,7 @@ class ChartManager {
 
         const ctx = canvas.getContext('2d');
         const isIRR = xLabel && xLabel.includes('IRR');
-        const bins = this.createHistogramBins(npvData, 50, isIRR);
+        const bins = this.createHistogramBins(npvData, isIRR);
 
         this.charts[canvasId] = new Chart(ctx, {
             type: 'bar',
@@ -229,29 +229,58 @@ class ChartManager {
         });
     }
 
-    createHistogramBins(data, numBins, isPercent = false) {
-        const min = Math.min(...data);
-        const max = Math.max(...data);
-        if (min === max) {
-            const label = isPercent ? (min * 100).toFixed(1) + '%' : min.toFixed(0);
+    createHistogramBins(data, isPercent = false) {
+        const dataMin = Math.min(...data);
+        const dataMax = Math.max(...data);
+        if (dataMin === dataMax) {
+            const label = isPercent ? (dataMin * 100).toFixed(1) + '%' : dataMin.toFixed(0);
             return { labels: [label], frequencies: [data.length] };
         }
-        const binWidth = (max - min) / numBins;
-        const frequencies = Array(numBins).fill(0);
+
+        // Compute IQR-based display range (wide Tukey fences: 3×IQR)
+        const sorted = [...data].sort((a, b) => a - b);
+        const q1 = sorted[Math.floor(sorted.length * 0.25)];
+        const q3 = sorted[Math.floor(sorted.length * 0.75)];
+        const iqr = q3 - q1;
+        const fenceLow = Math.max(dataMin, q1 - 3 * iqr);
+        const fenceHigh = Math.min(dataMax, q3 + 3 * iqr);
+
+        // Adaptive bin count: Rice rule capped at 50
+        const adaptiveBins = Math.min(50, Math.ceil(2 * Math.pow(data.length, 1 / 3)));
+        const effectiveBins = Math.max(adaptiveBins, 5);
+
+        const hasLowOutliers = fenceLow > dataMin;
+        const hasHighOutliers = fenceHigh < dataMax;
+
+        const binWidth = (fenceHigh - fenceLow) / effectiveBins;
+        const frequencies = Array(effectiveBins).fill(0);
         const labels = [];
 
-        for (let i = 0; i < numBins; i++) {
-            const binStart = min + i * binWidth;
+        const formatLabel = (value, prefix = '') => {
             if (isPercent) {
-                labels.push((binStart * 100).toFixed(1) + '%');
-            } else {
-                labels.push('$' + (binStart / 1000).toFixed(0) + 'k');
+                return prefix + (value * 100).toFixed(1) + '%';
             }
+            return prefix + '$' + (value / 1000).toFixed(0) + 'k';
+        };
+
+        for (let i = 0; i < effectiveBins; i++) {
+            const binStart = fenceLow + i * binWidth;
+            let prefix = '';
+            if (i === 0 && hasLowOutliers) prefix = '\u2264';
+            if (i === effectiveBins - 1 && hasHighOutliers) prefix = '\u2265';
+            labels.push(formatLabel(binStart, prefix));
         }
 
+        // Assign data to bins, folding outliers into edge bins
         data.forEach(value => {
-            const binIndex = Math.min(Math.floor((value - min) / binWidth), numBins - 1);
-            frequencies[binIndex]++;
+            if (value <= fenceLow) {
+                frequencies[0]++;
+            } else if (value >= fenceHigh) {
+                frequencies[effectiveBins - 1]++;
+            } else {
+                const binIndex = Math.min(Math.floor((value - fenceLow) / binWidth), effectiveBins - 1);
+                frequencies[binIndex]++;
+            }
         });
 
         return { labels, frequencies };
