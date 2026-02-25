@@ -58,6 +58,8 @@ class Stream:
     # Unit value mode: when both set, calculator uses unit_value * market_units instead of amount
     unit_value: Optional[Distribution] = None
     market_units: Optional[Distribution] = None
+    # If set, inherit unit_value from this stream (for linking prices across streams)
+    unit_value_source_stream_id: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
@@ -75,6 +77,7 @@ class Stream:
             "amount_is_ratio": self.amount_is_ratio,
             "unit_value": self.unit_value.to_dict() if self.unit_value else None,
             "market_units": self.market_units.to_dict() if self.market_units else None,
+            "unit_value_source_stream_id": self.unit_value_source_stream_id,
         }
 
     @classmethod
@@ -94,4 +97,5 @@ class Stream:
             amount_is_ratio=data.get("amount_is_ratio", True),
             unit_value=Distribution.from_dict(data["unit_value"]) if data.get("unit_value") else None,
             market_units=Distribution.from_dict(data["market_units"]) if data.get("market_units") else None,
+            unit_value_source_stream_id=data.get("unit_value_source_stream_id"),
         )

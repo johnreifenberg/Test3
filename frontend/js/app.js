@@ -5,6 +5,7 @@ let currentModel = null;
 async function init() {
     setupEventListeners();
     setupModelBuilderEvents();
+    initArithmeticTab();
     await loadModel();
 }
 
@@ -219,6 +220,7 @@ async function runDeterministic() {
     try {
         const results = await api.post('/calculate/deterministic');
         displayDeterministicResults(results);
+        updateArithmeticEngine(results);
         showStatus('Deterministic calculation complete.');
     } catch (e) {
         showStatus('Error: ' + e.message);
@@ -232,6 +234,7 @@ async function runMonteCarlo() {
     try {
         const results = await api.post('/calculate/monte-carlo', { n_simulations: nSim });
         displayMonteCarloResults(results);
+        updateArithmeticEngine(results);
         showStatus('Monte Carlo simulation complete.');
     } catch (e) {
         showStatus('Error: ' + e.message);
@@ -286,15 +289,36 @@ function displayDeterministicResults(results) {
     } else {
         const paybackDisplay = results.payback_period !== null && results.payback_period !== undefined
             ? results.payback_period.toFixed(1) + ' months' : 'Never';
+
+        // IRR display with improved error handling
+        let irrCardHTML;
+        if (results.irr !== null) {
+            irrCardHTML = `
+                <div class="result-card">
+                    <div class="label">Internal Rate of Return</div>
+                    <div class="value">${formatPercent(results.irr)}</div>
+                </div>`;
+        } else if (results.irr_error) {
+            irrCardHTML = `
+                <div class="result-card">
+                    <div class="label">Internal Rate of Return</div>
+                    <div class="value">Not Found</div>
+                    <div class="error-message" style="font-size:0.75rem; margin-top:8px; color:#d32f2f;">${results.irr_error}</div>
+                </div>`;
+        } else {
+            irrCardHTML = `
+                <div class="result-card">
+                    <div class="label">Internal Rate of Return</div>
+                    <div class="value">N/A</div>
+                </div>`;
+        }
+
         cardsHTML = `
             <div class="result-card">
                 <div class="label">Net Present Value</div>
                 <div class="value">${formatCurrency(results.npv)}</div>
             </div>
-            <div class="result-card">
-                <div class="label">Internal Rate of Return</div>
-                <div class="value">${results.irr !== null ? formatPercent(results.irr) : 'N/A'}</div>
-            </div>
+            ${irrCardHTML}
             <div class="result-card">
                 <div class="label">Terminal Value (PV)</div>
                 <div class="value">${formatCurrency(results.terminal_value)}</div>

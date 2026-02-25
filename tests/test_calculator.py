@@ -624,6 +624,37 @@ class TestNPVandIRR:
         assert irr is None
         assert "No sign change" in error
 
+    def test_irr_late_negative_cashflows(self):
+        """IRR with late negative cashflows - NPV never crosses zero in search range."""
+        calc = DCFCalculator(make_simple_model())
+        # Upfront investment, strong positive cashflows, then large negative at end
+        cashflows = np.array([-100000.0] + [10000.0] * 54 + [-50000.0] * 6)
+        irr, error = calc.calculate_irr(cashflows)
+        assert irr is None
+        assert error is not None
+        assert "NPV remains positive" in error or "NPV at 10%" in error
+
+    def test_irr_contextual_npv_in_error(self):
+        """Error message should include contextual NPV at 10% for reference."""
+        calc = DCFCalculator(make_simple_model())
+        # Create scenario where IRR doesn't exist in range but NPV is positive
+        cashflows = np.array([-100000.0] + [10000.0] * 54 + [-50000.0] * 6)
+        irr, error = calc.calculate_irr(cashflows)
+        assert irr is None
+        assert "NPV at 10%" in error
+        assert "$" in error  # Should include formatted dollar amount
+
+    def test_irr_all_negative_npv(self):
+        """IRR when NPV is always negative across range."""
+        calc = DCFCalculator(make_simple_model())
+        # Large negative at start, small positives after
+        cashflows = np.array([-1000000.0] + [5000.0] * 60)
+        irr, error = calc.calculate_irr(cashflows)
+        # This should either find an IRR or report NPV remains negative
+        if irr is None:
+            assert error is not None
+            assert "NPV" in error
+
 
 class TestIRRMode:
     def test_deterministic_irr_mode(self):

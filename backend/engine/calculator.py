@@ -17,6 +17,18 @@ class DCFCalculator:
         self.model = model
         self.n_months = model.settings.forecast_months
 
+    def _resolve_unit_value(self, stream: Stream) -> Optional:
+        """Resolve unit_value, following source reference if present.
+
+        If stream has unit_value_source_stream_id set, returns the unit_value
+        from the referenced source stream. Otherwise returns stream's own unit_value.
+        """
+        if stream.unit_value_source_stream_id:
+            source = self.model.streams.get(stream.unit_value_source_stream_id)
+            if source and source.unit_value:
+                return source.unit_value
+        return stream.unit_value
+
     @staticmethod
     def calculate_payback_period(cashflows: np.ndarray, discount_rate: float) -> Optional[float]:
         """Find the month where cumulative discounted cashflows cross zero.
@@ -59,13 +71,14 @@ class DCFCalculator:
             months_elapsed = m - stream.start_month
 
             # Base amount
-            if stream.unit_value is not None and stream.market_units is not None:
-                # Unit value x market units mode
+            resolved_unit_value = self._resolve_unit_value(stream)
+            if resolved_unit_value is not None and stream.market_units is not None:
+                # Unit value x market units mode (unit value may be linked to another stream)
                 if deterministic:
-                    uv = DistributionEngine.get_deterministic_value(stream.unit_value, month=m)
+                    uv = DistributionEngine.get_deterministic_value(resolved_unit_value, month=m)
                     mu = DistributionEngine.get_deterministic_value(stream.market_units, month=m)
                 else:
-                    uv = float(DistributionEngine.sample(stream.unit_value, size=1, month=m)[0])
+                    uv = float(DistributionEngine.sample(resolved_unit_value, size=1, month=m)[0])
                     mu = float(DistributionEngine.sample(stream.market_units, size=1, month=m)[0])
                 amount = uv * mu
             elif deterministic:
@@ -174,7 +187,7 @@ class DCFCalculator:
         return float(np.sum(cashflows * discount_factors))
 
     def calculate_irr(self, cashflows: np.ndarray) -> Tuple[Optional[float], Optional[str]]:
-        """Calculate IRR using scipy.optimize.brentq.
+        """Calculate IRR with improved error handling for late negative cashflows.
 
         Returns (irr_annualized, error_message). One of the two will be None.
         """
@@ -182,23 +195,43 @@ class DCFCalculator:
         has_positive = np.any(cashflows > 0)
         has_negative = np.any(cashflows < 0)
         if not (has_positive and has_negative):
-            return None, "No sign change in cashflows (need both positive and negative values)"
+            return None, "No sign change in cashflows - IRR undefined"
 
         if brentq is None:
             return None, "scipy not installed"
 
-        def npv_at_rate(monthly_rate):
-            factors = np.array([1.0 / (1 + monthly_rate) ** t for t in range(len(cashflows))])
-            return float(np.sum(cashflows * factors))
+        def npv_at_rate(r):
+            """Calculate NPV at an annual rate r."""
+            if r <= -1:
+                return np.inf
+            monthly_r = r / 12
+            discount_factors = np.array([(1 + monthly_r) ** -i for i in range(len(cashflows))])
+            return np.sum(cashflows * discount_factors)
+
+        # Evaluate NPV at bounds to detect monotonic behavior
+        lower_bound, upper_bound = -0.5, 10.0
+        npv_lower = npv_at_rate(lower_bound)
+        npv_upper = npv_at_rate(upper_bound)
+
+        # Check if NPV crosses zero in the search range
+        if npv_lower * npv_upper > 0:
+            # Both same sign - no zero crossing, IRR may not exist in this range
+            npv_at_10pct = npv_at_rate(0.10)
+            if npv_lower > 0 and npv_upper > 0:
+                msg = f"IRR not found: NPV remains positive across entire search range [-50%, 1000%]. This can occur with late-stage negative cashflows. NPV at 10% = ${npv_at_10pct:,.0f}"
+            else:
+                msg = f"IRR not found: NPV remains negative across entire search range [-50%, 1000%]. NPV at 10% = ${npv_at_10pct:,.0f}"
+            return None, msg
 
         try:
-            # Search for monthly rate in a wide range
-            monthly_irr = brentq(npv_at_rate, -0.5, 10.0, xtol=1e-10, maxiter=1000)
+            monthly_irr = brentq(npv_at_rate, lower_bound, upper_bound, xtol=1e-10, maxiter=1000)
             return float(monthly_irr * 12), None  # Annualize
-        except ValueError:
-            return None, "IRR solver could not find a solution in the search range"
+        except ValueError as e:
+            npv_at_10pct = npv_at_rate(0.10)
+            return None, f"IRR calculation failed: {str(e)}. NPV at 10% = ${npv_at_10pct:,.0f}"
         except Exception as e:
-            return None, f"IRR calculation failed: {str(e)}"
+            npv_at_10pct = npv_at_rate(0.10)
+            return None, f"IRR calculation failed: {str(e)}. NPV at 10% = ${npv_at_10pct:,.0f}"
 
     def _run_single(self, deterministic: bool) -> tuple:
         """Run a single calculation pass (used by both deterministic and MC)."""

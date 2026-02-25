@@ -65,6 +65,9 @@ class FinancialModel:
         for stream in self.streams.values():
             if stream.parent_stream_id == stream_id:
                 stream.parent_stream_id = None
+            # Clear unit value source references to the removed stream
+            if stream.unit_value_source_stream_id == stream_id:
+                stream.unit_value_source_stream_id = None
 
     def reorder_streams(self, new_order: List[str]) -> None:
         for sid in new_order:
@@ -125,6 +128,42 @@ class FinancialModel:
                     f"Discount rate ({dr}) must be greater than terminal growth rate "
                     f"({self.settings.terminal_growth_rate})"
                 )
+
+        # Validate unit value source references
+        self.validate_unit_value_references()
+
+    def validate_unit_value_references(self) -> None:
+        """Ensure unit_value_source_stream_id references are valid and acyclic."""
+        for stream in self.streams.values():
+            if stream.unit_value_source_stream_id:
+                # Check source exists
+                if stream.unit_value_source_stream_id not in self.streams:
+                    raise ModelValidationError(
+                        f"Stream '{stream.id}' references non-existent unit value source "
+                        f"'{stream.unit_value_source_stream_id}'"
+                    )
+                source = self.streams[stream.unit_value_source_stream_id]
+                # Check source is root stream with unit pricing
+                if source.parent_stream_id:
+                    raise ModelValidationError(
+                        f"Stream '{stream.id}' cannot link to child stream '{source.id}' for unit value"
+                    )
+                if not source.unit_value:
+                    raise ModelValidationError(
+                        f"Stream '{stream.id}' cannot link to stream '{source.id}' which has no unit_value"
+                    )
+                # Check for circular references (DFS)
+                visited = {stream.id}
+                current = source
+                while current.unit_value_source_stream_id:
+                    if current.unit_value_source_stream_id in visited:
+                        raise CircularDependencyError(
+                            f"Circular unit value reference detected involving stream '{stream.id}'"
+                        )
+                    visited.add(current.unit_value_source_stream_id)
+                    if current.unit_value_source_stream_id not in self.streams:
+                        break
+                    current = self.streams[current.unit_value_source_stream_id]
 
     def get_execution_order(self) -> List[str]:
         """Topological sort of stream IDs based on parent-child relationships."""

@@ -67,6 +67,7 @@ class StreamRequest(BaseModel):
     amount_is_ratio: bool = True
     unit_value: Optional[dict] = None
     market_units: Optional[dict] = None
+    unit_value_source_stream_id: Optional[str] = None
 
 
 class ReorderRequest(BaseModel):
@@ -201,6 +202,7 @@ async def add_stream(req: StreamRequest):
             amount_is_ratio=req.amount_is_ratio,
             unit_value=Distribution.from_dict(req.unit_value) if req.unit_value else None,
             market_units=Distribution.from_dict(req.market_units) if req.market_units else None,
+            unit_value_source_stream_id=req.unit_value_source_stream_id,
         )
         model.add_stream(stream)
         return model.to_dict()
@@ -229,6 +231,7 @@ async def update_stream(stream_id: str, req: StreamRequest):
             amount_is_ratio=req.amount_is_ratio,
             unit_value=Distribution.from_dict(req.unit_value) if req.unit_value else None,
             market_units=Distribution.from_dict(req.market_units) if req.market_units else None,
+            unit_value_source_stream_id=req.unit_value_source_stream_id,
         )
         # Remove old, add new
         if stream_id != req.id:

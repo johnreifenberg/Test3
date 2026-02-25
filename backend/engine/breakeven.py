@@ -20,7 +20,8 @@ class BreakevenAnalyzer:
         # Also include FIXED distributions — any numeric parameter is solvable
         for sid, stream in self.model.streams.items():
             if stream.unit_value is not None and stream.market_units is not None:
-                if stream.unit_value.dist_type == DistributionType.FIXED:
+                # Exclude unit value if it's linked to another stream (not independently solvable)
+                if stream.unit_value.dist_type == DistributionType.FIXED and not stream.unit_value_source_stream_id:
                     params.append({
                         "stream_id": sid,
                         "stream_name": stream.name,

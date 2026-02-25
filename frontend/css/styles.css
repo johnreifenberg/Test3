@@ -442,6 +442,98 @@ input:focus, select:focus {
     margin-top: 8px;
 }
 
+/* ── Streams Arithmetic ─────────────────────────────────────────── */
+.arithmetic-controls {
+    margin-bottom: 24px;
+}
+
+.formula-builder {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.stream-button-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 8px;
+}
+
+.stream-button {
+    padding: 4px 8px;
+    font-size: 12px;
+    border: 1px solid #ddd;
+    background: #f5f5f5;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.stream-button:hover {
+    background: #e0e0e0;
+}
+
+.saved-formulas {
+    margin-top: 24px;
+    padding: 16px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #fafafa;
+}
+
+.saved-formulas h3 {
+    margin-top: 0;
+    margin-bottom: 12px;
+}
+
+.formula-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px;
+    margin-bottom: 8px;
+    background: #fff;
+    border-radius: 4px;
+    border: 1px solid #eee;
+}
+
+.formula-item .formula-text {
+    font-family: monospace;
+    color: #333;
+    margin-left: 8px;
+}
+
+.arithmetic-results {
+    margin-top: 24px;
+}
+
+.formula-result-section {
+    margin-bottom: 32px;
+    padding: 16px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #fff;
+}
+
+.formula-result-section h4 {
+    margin-top: 0;
+    margin-bottom: 12px;
+}
+
+.result-stats {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+    font-size: 14px;
+}
+
+.result-stats span {
+    padding: 4px 8px;
+    background: #f5f5f5;
+    border-radius: 4px;
+}
+
 /* ── Utility ────────────────────────────────────────────────────── */
 .mt-2 { margin-top: 8px; }
 .mt-4 { margin-top: 16px; }

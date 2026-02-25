@@ -297,10 +297,66 @@ function updateChildAmountLabels(existingParams) {
     updateFormulaBar();
 }
 
-function showStreamModal(streamId = null) {
+function populateUnitValueSourceOptions() {
+    /**
+     * Populate the unit value source dropdown with eligible root streams.
+     * Only root streams with unit_value defined are eligible sources.
+     */
+    const select = document.getElementById('unit-value-source');
+    const currentStreamId = editingStreamId;
+
+    // Clear existing options except the first (independent) option
+    select.innerHTML = '<option value="">Use own unit value (independent)</option>';
+
+    if (!currentModel || !currentModel.streams) return;
+
+    const streams = Array.isArray(currentModel.streams) ? currentModel.streams : Object.values(currentModel.streams);
+    for (const stream of streams) {
+        // Only root streams with unit_value can be sources
+        if (!stream.parent_stream_id && stream.unit_value && stream.id !== currentStreamId) {
+            const option = document.createElement('option');
+            option.value = stream.id;
+            option.textContent = stream.name;
+            select.appendChild(option);
+        }
+    }
+}
+
+function toggleUnitValueSource() {
+    /**
+     * Show/hide unit value distribution inputs based on whether a source is selected.
+     * If a source is selected, disable the distribution inputs.
+     */
+    const sourceSelect = document.getElementById('unit-value-source');
+    const hasSource = sourceSelect.value !== '';
+    const distGroup = document.getElementById('unit-value-dist-group');
+
+    // Disable/enable distribution inputs
+    const distTypeSelect = document.getElementById('unit-value-dist-type');
+    const distParams = document.getElementById('unit-value-params');
+
+    if (hasSource) {
+        // Source selected - disable own distribution
+        distGroup.style.opacity = '0.5';
+        distTypeSelect.disabled = true;
+        // Disable all param inputs
+        const inputs = distParams.querySelectorAll('input');
+        inputs.forEach(input => input.disabled = true);
+    } else {
+        // No source - enable own distribution
+        distGroup.style.opacity = '1';
+        distTypeSelect.disabled = false;
+        const inputs = distParams.querySelectorAll('input');
+        inputs.forEach(input => input.disabled = false);
+    }
+}
+
+function showStreamModal(streamId = null, isJustCloned = false) {
     editingStreamId = streamId;
     const modal = document.getElementById('modal-stream');
     const title = document.getElementById('modal-stream-title');
+    const idInput = document.getElementById('stream-id');
+    const idHelp = document.getElementById('stream-id-help');
 
     // Populate parent dropdown
     const parentSelect = document.getElementById('stream-parent');
@@ -315,12 +371,14 @@ function showStreamModal(streamId = null) {
     }
 
     if (streamId && currentModel) {
-        title.textContent = 'Edit Stream';
+        // Edit or just-cloned mode
+        title.textContent = isJustCloned ? 'Edit Cloned Stream' : 'Edit Stream';
         const streams = Array.isArray(currentModel.streams) ? currentModel.streams : Object.values(currentModel.streams);
         const stream = streams.find(s => s.id === streamId);
         if (stream) {
-            document.getElementById('stream-id').value = stream.id;
-            document.getElementById('stream-id').disabled = true;
+            idInput.value = stream.id;
+            idInput.disabled = !isJustCloned;  // Enable if just cloned
+            idHelp.style.display = isJustCloned ? 'block' : 'none';
             document.getElementById('stream-name').value = stream.name;
             document.getElementById('stream-type').value = stream.stream_type;
             document.getElementById('stream-start').value = stream.start_month;
@@ -339,6 +397,10 @@ function showStreamModal(streamId = null) {
                 // Root stream - detect unit value mode
                 if (stream.unit_value && stream.market_units) {
                     document.getElementById('amount-entry-mode').value = 'unit';
+                    // Populate unit value source options
+                    populateUnitValueSourceOptions();
+                    document.getElementById('unit-value-source').value = stream.unit_value_source_stream_id || '';
+                    toggleUnitValueSource();
                     document.getElementById('unit-value-dist-type').value = stream.unit_value.type;
                     renderSpecificDistParams('unit-value-params', stream.unit_value.type, 'unit-value', stream.unit_value.params, UNIT_VALUE_PARAMS);
                     document.getElementById('market-units-dist-type').value = stream.market_units.type;
@@ -366,9 +428,11 @@ function showStreamModal(streamId = null) {
             updateParentFields();
         }
     } else {
+        // New stream mode
         title.textContent = 'Add Stream';
-        document.getElementById('stream-id').value = '';
-        document.getElementById('stream-id').disabled = false;
+        idInput.value = '';
+        idInput.disabled = false;
+        idHelp.style.display = 'block';
         document.getElementById('stream-name').value = '';
         document.getElementById('stream-type').value = 'REVENUE';
         document.getElementById('stream-start').value = '0';
@@ -377,6 +441,10 @@ function showStreamModal(streamId = null) {
         document.getElementById('amount-entry-mode').value = 'total';
         document.getElementById('amount-dist-type').value = 'FIXED';
         renderDistParams('amount-params', 'FIXED', 'amount', null);
+        // Populate unit value source options and reset to independent
+        populateUnitValueSourceOptions();
+        document.getElementById('unit-value-source').value = '';
+        toggleUnitValueSource();
         document.getElementById('unit-value-dist-type').value = 'FIXED';
         renderSpecificDistParams('unit-value-params', 'FIXED', 'unit-value', null, UNIT_VALUE_PARAMS);
         document.getElementById('market-units-dist-type').value = 'FIXED';
@@ -450,6 +518,9 @@ async function duplicateStream(streamId) {
         currentModel = await api.post('/streams', data);
         renderModel();
         showStatus(`Stream "${src.name}" cloned.`);
+
+        // Open modal for editing, with ID field enabled
+        showStreamModal(copyId, true);  // true = isJustCloned flag
     } catch (e) {
         alert('Error duplicating stream: ' + e.message);
     }
@@ -493,6 +564,9 @@ async function saveStream(e) {
             // Unit value x market units mode
             streamData.unit_value = getSpecificDistFromInputs('unit-value-dist-type', 'unit-value', UNIT_VALUE_PARAMS);
             streamData.market_units = getSpecificDistFromInputs('market-units-dist-type', 'market-units', MARKET_UNITS_PARAMS);
+            // Unit value source (if linked to another stream)
+            const sourceId = document.getElementById('unit-value-source').value;
+            streamData.unit_value_source_stream_id = sourceId || null;
             // Set amount to a dummy FIXED 0 (backend uses unit_value * market_units)
             streamData.amount = { type: 'FIXED', params: { value: 0 } };
         } else {
@@ -505,7 +579,15 @@ async function saveStream(e) {
 
     try {
         if (editingStreamId) {
-            currentModel = await api.put(`/streams/${editingStreamId}`, streamData);
+            // Check if ID has changed (only possible when ID field is enabled after cloning)
+            if (streamData.id !== editingStreamId) {
+                // ID changed: delete old stream and create new one
+                currentModel = await api.delete(`/streams/${editingStreamId}`);
+                currentModel = await api.post('/streams', streamData);
+            } else {
+                // Normal update
+                currentModel = await api.put(`/streams/${editingStreamId}`, streamData);
+            }
         } else {
             currentModel = await api.post('/streams', streamData);
         }
@@ -742,6 +824,9 @@ function setupModelBuilderEvents() {
 
     // Parent stream change
     document.getElementById('stream-parent').addEventListener('change', updateParentFields);
+
+    // Unit value source change
+    document.getElementById('unit-value-source').addEventListener('change', toggleUnitValueSource);
 
     // Stream form submit
     document.getElementById('form-stream').addEventListener('submit', saveStream);

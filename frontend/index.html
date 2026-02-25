@@ -39,6 +39,7 @@
                 <button class="tab active" data-tab="builder">Model Builder</button>
                 <button class="tab" data-tab="cashflows">Cashflows</button>
                 <button class="tab" data-tab="calculate">Calculate</button>
+                <button class="tab" data-tab="arithmetic">Streams Arithmetic</button>
                 <button class="tab" data-tab="results">Results</button>
             </div>
 
@@ -155,6 +156,42 @@
                 <div id="calculation-status" class="status-bar"></div>
             </div>
 
+            <!-- Tab: Streams Arithmetic -->
+            <div id="tab-arithmetic" class="tab-content">
+                <h2>Streams Arithmetic</h2>
+                <p class="help-text">Perform calculations on stream cashflows. Build formulas using stream names and basic operators (+, -, *, /, parentheses).</p>
+
+                <div class="arithmetic-controls">
+                    <div class="form-group">
+                        <label for="formula-name">Formula Name</label>
+                        <input type="text" id="formula-name" placeholder="e.g. Total Revenue">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="formula-input">Formula</label>
+                        <div class="formula-builder">
+                            <input type="text" id="formula-input" placeholder="e.g. Enterprise + SMB">
+                            <div id="stream-buttons" class="stream-button-container"></div>
+                        </div>
+                        <p class="help-text">Available streams shown as buttons below. Click to insert into formula.</p>
+                    </div>
+
+                    <div class="button-row">
+                        <button id="btn-add-formula" class="btn btn-primary">Add Formula</button>
+                        <button id="btn-clear-formula" class="btn">Clear</button>
+                    </div>
+                </div>
+
+                <div id="saved-formulas" class="saved-formulas">
+                    <h3>Saved Formulas</h3>
+                    <div id="formulas-list"></div>
+                </div>
+
+                <div id="arithmetic-results" class="arithmetic-results">
+                    <p class="placeholder">Add a formula and run calculations to see results.</p>
+                </div>
+            </div>
+
             <!-- Tab: Results -->
             <div id="tab-results" class="tab-content">
                 <div id="results-container">
@@ -186,6 +223,9 @@
                     <div class="form-group">
                         <label for="stream-id">Stream ID</label>
                         <input type="text" id="stream-id" required placeholder="e.g. revenue_main">
+                        <p class="help-text" id="stream-id-help" style="display:none;">
+                            You can change this ID before saving. After saving, ID changes require deleting and recreating the stream.
+                        </p>
                     </div>
                     <div class="form-group">
                         <label for="stream-name">Name</label>
@@ -245,6 +285,13 @@
                     <div id="amount-unit-mode" style="display:none;">
                         <p class="help-text">Calculate market size as Unit Value (price/cost) &times; Market Units (quantity). Both support distributions for uncertainty.</p>
                         <h4>Unit Value (Price/Cost per Unit)</h4>
+                        <div class="form-group" id="unit-value-source-group">
+                            <label for="unit-value-source">Link to Another Stream's Unit Price</label>
+                            <select id="unit-value-source">
+                                <option value="">Use own unit value (independent)</option>
+                            </select>
+                            <p class="help-text">Link this stream's unit price to another stream. Changes to the source stream will automatically apply here.</p>
+                        </div>
                         <div class="dist-input-group" id="unit-value-dist-group">
                             <select id="unit-value-dist-type" class="dist-type-select">
                                 <option value="FIXED">Fixed</option>
@@ -347,6 +394,7 @@
     <script src="js/api-client.js"></script>
     <script src="js/charts.js"></script>
     <script src="js/model-builder.js"></script>
+    <script src="js/arithmetic.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>
