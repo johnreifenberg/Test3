@@ -1,5 +1,5 @@
 /**
- * Streams Arithmetic Engine
+ * Streams Arithmetic Engine - Simplified Drag & Drop Interface
  * Evaluates formulas on stream cashflows from last calculation results.
  */
 
@@ -7,55 +7,43 @@ class ArithmeticEngine {
     constructor() {
         this.formulas = [];  // [{name, formula, cashflows}]
         this.streamDetails = null;  // From last calculation
+        this.currentFormula = [];  // Array of tokens: {type: 'stream'|'operator', value: string}
     }
 
     setStreamDetails(details) {
         this.streamDetails = details;
     }
 
-    parseFormula(formula) {
-        /**
-         * Tokenize formula string into stream names, operators, and parentheses.
-         * Stream names can contain letters, numbers, underscores.
-         * Returns: {valid: bool, tokens: [], error: string}
-         */
-        const tokens = [];
-        const pattern = /([a-zA-Z_][a-zA-Z0-9_]*)|([+\-*/()])/g;
-        let match;
-
-        while ((match = pattern.exec(formula)) !== null) {
-            tokens.push(match[0]);
-        }
-
-        return {valid: true, tokens, error: null};
+    hasStreamData() {
+        return this.streamDetails && this.streamDetails.length > 0;
     }
 
-    validateFormula(formula) {
-        /**
-         * Check if formula is syntactically valid and all streams exist.
-         * Returns: {valid: bool, error: string}
-         */
-        if (!this.streamDetails) {
-            return {valid: false, error: "No calculation results available. Run a calculation first."};
-        }
+    getStreams() {
+        if (!this.streamDetails) return [];
+        return this.streamDetails.map(s => ({
+            name: s.stream_name,
+            type: s.stream_type || 'REVENUE'
+        }));
+    }
 
-        const parsed = this.parseFormula(formula);
-        if (!parsed.valid) {
-            return {valid: false, error: parsed.error};
-        }
+    addToken(type, value) {
+        this.currentFormula.push({type, value});
+        return this.buildFormulaString();
+    }
 
-        // Check all stream references exist
-        const streamNames = new Set(this.streamDetails.map(s => s.stream_name));
-        for (const token of parsed.tokens) {
-            if (/^[a-zA-Z_]/.test(token)) {
-                // It's a stream name
-                if (!streamNames.has(token)) {
-                    return {valid: false, error: `Stream "${token}" not found in model`};
-                }
+    clearFormula() {
+        this.currentFormula = [];
+        return '';
+    }
+
+    buildFormulaString() {
+        if (this.currentFormula.length === 0) return '';
+        return this.currentFormula.map(token => {
+            if (token.type === 'stream') {
+                return token.value;  // Stream name (may have spaces)
             }
-        }
-
-        return {valid: true, error: null};
+            return ` ${token.value} `;  // Operator with spaces
+        }).join('').trim();
     }
 
     evaluateFormula(formula) {
@@ -63,9 +51,12 @@ class ArithmeticEngine {
          * Evaluate formula month-by-month using stream cashflows.
          * Returns: {cashflows: number[], error: string}
          */
-        const validation = this.validateFormula(formula);
-        if (!validation.valid) {
-            return {cashflows: null, error: validation.error};
+        if (!this.streamDetails) {
+            return {cashflows: null, error: "No calculation results available. Run a calculation first."};
+        }
+
+        if (!formula || formula.trim() === '') {
+            return {cashflows: null, error: "Formula is empty"};
         }
 
         // Build lookup: stream_name -> cashflows array
@@ -74,29 +65,41 @@ class ArithmeticEngine {
             streamCashflows[detail.stream_name] = detail.cashflows;
         }
 
-        // Determine result length (max of all referenced streams)
-        let maxLength = 0;
-        const parsed = this.parseFormula(formula);
-        for (const token of parsed.tokens) {
-            if (streamCashflows[token]) {
-                maxLength = Math.max(maxLength, streamCashflows[token].length);
+        // Validate all stream references exist
+        const streamNames = Object.keys(streamCashflows);
+        for (const name of streamNames) {
+            if (!formula.includes(name)) continue;
+            // Check if the stream name is properly isolated (not part of another word)
+            const regex = new RegExp('\\b' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b');
+            if (!regex.test(formula)) {
+                // Stream name exists but not as a complete word
+                continue;
             }
         }
 
+        // Determine result length (max of all streams)
+        let maxLength = Math.max(...Object.values(streamCashflows).map(cf => cf.length));
+
         // Evaluate month by month
-        const result = new Array(maxLength).fill(0);
+        const result = [];
         for (let month = 0; month < maxLength; month++) {
             // Build expression with values for this month
             let expr = formula;
-            for (const [name, cfs] of Object.entries(streamCashflows)) {
+
+            // Replace stream names with values (longest names first to avoid partial replacements)
+            const sortedNames = Object.keys(streamCashflows).sort((a, b) => b.length - a.length);
+            for (const name of sortedNames) {
+                const cfs = streamCashflows[name];
                 const value = month < cfs.length ? cfs[month] : 0;
-                // Replace stream name with value (use regex with word boundaries)
-                expr = expr.replace(new RegExp('\\b' + name + '\\b', 'g'), value);
+                // Use regex to replace whole words only
+                const regex = new RegExp('\\b' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'g');
+                expr = expr.replace(regex, `(${value})`);
             }
 
             try {
                 // Evaluate using Function constructor (safer than eval)
-                result[month] = new Function('return ' + expr)();
+                const calculated = new Function('return ' + expr)();
+                result.push(calculated);
             } catch (e) {
                 return {cashflows: null, error: `Evaluation error at month ${month}: ${e.message}`};
             }
@@ -105,7 +108,7 @@ class ArithmeticEngine {
         return {cashflows: result, error: null};
     }
 
-    addFormula(name, formula) {
+    saveFormula(name, formula) {
         const result = this.evaluateFormula(formula);
         if (result.error) {
             return {success: false, error: result.error};
@@ -117,13 +120,13 @@ class ArithmeticEngine {
         }
 
         this.formulas.push({name, formula, cashflows: result.cashflows});
-        syncFormulasToBackend();  // Persist to backend
+        syncFormulasToBackend();
         return {success: true};
     }
 
     removeFormula(name) {
         this.formulas = this.formulas.filter(f => f.name !== name);
-        syncFormulasToBackend();  // Persist to backend
+        syncFormulasToBackend();
     }
 
     getFormulas() {
@@ -135,32 +138,22 @@ class ArithmeticEngine {
     }
 
     loadFormulas(formulas) {
-        /**
-         * Load formulas from saved model data.
-         * Formulas are stored as [{name, formula}] without cashflows.
-         * Cashflows will be recalculated when results are available.
-         */
         this.formulas = [];
         if (!formulas || !Array.isArray(formulas)) {
             return;
         }
         for (const f of formulas) {
             if (f.name && f.formula) {
-                // Don't evaluate yet - wait for calculation results
                 this.formulas.push({
                     name: f.name,
                     formula: f.formula,
-                    cashflows: null  // Will be calculated later
+                    cashflows: null
                 });
             }
         }
     }
 
     exportFormulas() {
-        /**
-         * Export formulas for saving to model JSON.
-         * Only save name and formula, not cashflows (they're derived).
-         */
         return this.formulas.map(f => ({
             name: f.name,
             formula: f.formula
@@ -168,10 +161,6 @@ class ArithmeticEngine {
     }
 
     recalculateAll() {
-        /**
-         * Recalculate all formulas using current stream details.
-         * Call this after loading formulas or after new calculation results.
-         */
         const updatedFormulas = [];
         for (const formula of this.formulas) {
             const result = this.evaluateFormula(formula.formula);
@@ -192,109 +181,166 @@ const arithmeticEngine = new ArithmeticEngine();
  * UI Management
  */
 function initArithmeticTab() {
-    const formulaInput = document.getElementById('formula-input');
-    const formulaName = document.getElementById('formula-name');
-    const btnAdd = document.getElementById('btn-add-formula');
-    const btnClear = document.getElementById('btn-clear-formula');
+    renderAvailableStreams();
+    renderFormulasListNew();
+    setupDragAndDrop();
+    setupOperatorButtons();
+    setupSaveButton();
+}
 
-    // Populate stream buttons
-    updateStreamButtons();
+function renderAvailableStreams() {
+    const container = document.getElementById('available-streams');
+    const noCalcWarning = document.getElementById('arithmetic-no-calc');
 
-    // Real-time formula preview with debouncing
-    let previewTimeout = null;
-    formulaInput.addEventListener('input', () => {
-        clearTimeout(previewTimeout);
-        previewTimeout = setTimeout(() => {
-            updateFormulaPreview(formulaInput.value.trim());
-        }, 300);  // 300ms debounce
+    if (!arithmeticEngine.hasStreamData()) {
+        container.innerHTML = '<p class="help-text">Run a calculation to load streams</p>';
+        noCalcWarning.style.display = 'block';
+        return;
+    }
+
+    noCalcWarning.style.display = 'none';
+    container.innerHTML = '';
+
+    const streams = arithmeticEngine.getStreams();
+    for (const stream of streams) {
+        const div = document.createElement('div');
+        div.className = 'stream-item';
+        div.classList.add(stream.type.toLowerCase());
+        div.textContent = stream.name;
+        div.draggable = true;
+        div.dataset.streamName = stream.name;
+
+        // Drag events
+        div.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text/plain', stream.name);
+            e.dataTransfer.effectAllowed = 'copy';
+        });
+
+        // Click to add
+        div.addEventListener('click', () => {
+            addStreamToFormula(stream.name);
+        });
+
+        container.appendChild(div);
+    }
+}
+
+function setupDragAndDrop() {
+    const display = document.getElementById('formula-display');
+
+    display.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        display.classList.add('drag-over');
     });
 
-    btnAdd.addEventListener('click', () => {
-        const name = formulaName.value.trim();
-        const formula = formulaInput.value.trim();
+    display.addEventListener('dragleave', () => {
+        display.classList.remove('drag-over');
+    });
 
-        if (!name || !formula) {
-            alert('Please enter both a name and formula');
+    display.addEventListener('drop', (e) => {
+        e.preventDefault();
+        display.classList.remove('drag-over');
+        const streamName = e.dataTransfer.getData('text/plain');
+        if (streamName) {
+            addStreamToFormula(streamName);
+        }
+    });
+}
+
+function setupOperatorButtons() {
+    document.querySelectorAll('.op-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const op = btn.dataset.op;
+            if (op === 'clear') {
+                clearFormulaDisplay();
+            } else {
+                addOperatorToFormula(op);
+            }
+        });
+    });
+}
+
+function setupSaveButton() {
+    document.getElementById('btn-save-formula').addEventListener('click', () => {
+        const name = document.getElementById('formula-name-new').value.trim();
+        const formula = arithmeticEngine.buildFormulaString();
+
+        if (!name) {
+            alert('Please enter a formula name');
             return;
         }
 
-        const result = arithmeticEngine.addFormula(name, formula);
+        if (!formula) {
+            alert('Please build a formula first');
+            return;
+        }
+
+        const result = arithmeticEngine.saveFormula(name, formula);
         if (!result.success) {
             alert(result.error);
             return;
         }
 
-        formulaName.value = '';
-        formulaInput.value = '';
-        hideFormulaPreview();
-        renderFormulasList();
-        renderArithmeticResults();
-    });
-
-    btnClear.addEventListener('click', () => {
-        formulaName.value = '';
-        formulaInput.value = '';
-        hideFormulaPreview();
+        // Clear and refresh
+        document.getElementById('formula-name-new').value = '';
+        clearFormulaDisplay();
+        renderFormulasListNew();
     });
 }
 
-function updateFormulaPreview(formula) {
-    const previewDiv = document.getElementById('formula-preview');
-    const previewText = document.getElementById('formula-preview-text');
+function addStreamToFormula(streamName) {
+    arithmeticEngine.addToken('stream', streamName);
+    updateFormulaDisplay();
+}
+
+function addOperatorToFormula(operator) {
+    arithmeticEngine.addToken('operator', operator);
+    updateFormulaDisplay();
+}
+
+function clearFormulaDisplay() {
+    arithmeticEngine.clearFormula();
+    updateFormulaDisplay();
+}
+
+function updateFormulaDisplay() {
+    const display = document.getElementById('formula-display');
+    const preview = document.getElementById('formula-preview-new');
+    const previewText = document.getElementById('formula-preview-text-new');
+
+    const formula = arithmeticEngine.buildFormulaString();
 
     if (!formula) {
-        hideFormulaPreview();
+        display.innerHTML = '<span class="placeholder-text">Drag streams here or use buttons below</span>';
+        preview.style.display = 'none';
         return;
     }
 
-    const result = arithmeticEngine.evaluateFormula(formula);
+    // Display formula with visual formatting
+    display.innerHTML = arithmeticEngine.currentFormula.map(token => {
+        if (token.type === 'stream') {
+            return `<span class="stream-chip">${escapeHtml(token.value)}</span>`;
+        }
+        return `<span class="operator">${escapeHtml(token.value)}</span>`;
+    }).join('');
 
+    // Show preview
+    const result = arithmeticEngine.evaluateFormula(formula);
     if (result.error) {
-        previewDiv.className = 'formula-preview error';
+        preview.className = 'formula-preview error';
         previewText.textContent = result.error;
-        previewDiv.style.display = 'block';
+        preview.style.display = 'block';
     } else if (result.cashflows) {
         const total = result.cashflows.reduce((a, b) => a + b, 0);
         const avg = total / result.cashflows.length;
-        previewDiv.className = 'formula-preview success';
+        preview.className = 'formula-preview success';
         previewText.textContent = `Total: $${total.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})} | Avg/Month: $${avg.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
-        previewDiv.style.display = 'block';
-    } else {
-        hideFormulaPreview();
+        preview.style.display = 'block';
     }
 }
 
-function hideFormulaPreview() {
-    const previewDiv = document.getElementById('formula-preview');
-    previewDiv.style.display = 'none';
-}
-
-function updateStreamButtons() {
-    const container = document.getElementById('stream-buttons');
-    if (!session.model || !session.model.streams) {
-        container.innerHTML = '<p class="help-text">No streams available</p>';
-        return;
-    }
-
-    container.innerHTML = '';
-    const streams = Array.isArray(session.model.streams) ? session.model.streams : Object.values(session.model.streams);
-    for (const stream of streams) {
-        const btn = document.createElement('button');
-        btn.className = 'stream-button';
-        btn.textContent = stream.name;
-        btn.type = 'button';  // Prevent form submission
-        btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            const input = document.getElementById('formula-input');
-            input.value += stream.name;
-            input.focus();
-        });
-        container.appendChild(btn);
-    }
-}
-
-function renderFormulasList() {
-    const container = document.getElementById('formulas-list');
+function renderFormulasListNew() {
+    const container = document.getElementById('formulas-list-new');
     const formulas = arithmeticEngine.getFormulas();
 
     if (formulas.length === 0) {
@@ -306,64 +352,46 @@ function renderFormulasList() {
     for (const formula of formulas) {
         const item = document.createElement('div');
         item.className = 'formula-item';
-        item.innerHTML = `
-            <div>
-                <strong>${escapeHtml(formula.name)}</strong>
-                <span class="formula-text"> = ${escapeHtml(formula.formula)}</span>
-            </div>
-            <button class="btn btn-sm" onclick="removeFormula('${escapeHtml(formula.name)}')">Remove</button>
-        `;
-        container.appendChild(item);
-    }
-}
-
-function removeFormula(name) {
-    arithmeticEngine.removeFormula(name);
-    renderFormulasList();
-    renderArithmeticResults();
-}
-
-function renderArithmeticResults() {
-    const container = document.getElementById('arithmetic-results');
-    const formulas = arithmeticEngine.getFormulas();
-
-    if (formulas.length === 0) {
-        container.innerHTML = '<p class="placeholder">Add a formula to see results</p>';
-        return;
-    }
-
-    // Render each formula as a chart and summary
-    container.innerHTML = '<h3>Results</h3>';
-    for (const formula of formulas) {
-        const section = document.createElement('div');
-        section.className = 'formula-result-section';
 
         // Calculate summary stats
-        const total = formula.cashflows.reduce((a, b) => a + b, 0);
-        const avg = total / formula.cashflows.length;
-        const max = Math.max(...formula.cashflows);
-        const min = Math.min(...formula.cashflows);
+        let statsHTML = '';
+        if (formula.cashflows && formula.cashflows.length > 0) {
+            const total = formula.cashflows.reduce((a, b) => a + b, 0);
+            const avg = total / formula.cashflows.length;
+            statsHTML = `
+                <div class="result-stats">
+                    <span>Total: $${total.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
+                    <span>Avg: $${avg.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
+                </div>
+            `;
+        }
 
-        const canvasId = `chart-${formula.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
-        section.innerHTML = `
-            <h4>${escapeHtml(formula.name)}</h4>
-            <div class="result-stats">
-                <span>Total: $${total.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
-                <span>Avg/Month: $${avg.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
-                <span>Max: $${max.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
-                <span>Min: $${min.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
+        // Create unique canvas ID
+        const canvasId = `chart-formula-${formula.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+        item.innerHTML = `
+            <div class="formula-item-content">
+                <div class="formula-item-name">${escapeHtml(formula.name)}</div>
+                <div class="formula-item-expression">${escapeHtml(formula.formula)}</div>
+                ${statsHTML}
+                ${formula.cashflows ? `<canvas id="${canvasId}" class="formula-item-chart" height="200"></canvas>` : ''}
             </div>
-            <canvas id="${canvasId}" width="800" height="300"></canvas>
+            <button class="btn btn-sm" onclick="removeFormulaNew('${escapeHtml(formula.name)}')">Remove</button>
         `;
-        container.appendChild(section);
+        container.appendChild(item);
 
-        // Render chart
-        renderArithmeticChart(canvasId, formula.name, formula.cashflows);
+        // Render chart if we have cashflows
+        if (formula.cashflows && formula.cashflows.length > 0) {
+            setTimeout(() => renderFormulaChart(canvasId, formula.name, formula.cashflows), 0);
+        }
     }
 }
 
-function renderArithmeticChart(canvasId, label, cashflows) {
-    const ctx = document.getElementById(canvasId).getContext('2d');
+function renderFormulaChart(canvasId, label, cashflows) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
     new Chart(ctx, {
         type: 'line',
         data: {
@@ -381,7 +409,6 @@ function renderArithmeticChart(canvasId, label, cashflows) {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                title: {display: true, text: label},
                 legend: {display: false}
             },
             scales: {
@@ -395,15 +422,33 @@ function renderArithmeticChart(canvasId, label, cashflows) {
     });
 }
 
+function removeFormulaNew(name) {
+    if (confirm(`Remove formula "${name}"?`)) {
+        arithmeticEngine.removeFormula(name);
+        renderFormulasListNew();
+    }
+}
+
 // Hook into calculation results
 function updateArithmeticEngine(results) {
     if (results && results.stream_details) {
-        arithmeticEngine.setStreamDetails(results.stream_details);
-        updateStreamButtons();
-        // Recalculate existing formulas with new stream data
+        // Convert stream_details object to array format
+        const detailsArray = Object.entries(results.stream_details).map(([id, cashflows]) => {
+            // Find stream name from session
+            const stream = session.model.streams.find(s => s.id === id);
+            return {
+                stream_name: stream ? stream.name : id,
+                stream_type: stream ? stream.stream_type : 'REVENUE',
+                cashflows: cashflows
+            };
+        });
+
+        arithmeticEngine.setStreamDetails(detailsArray);
+        renderAvailableStreams();
+
+        // Recalculate existing formulas
         arithmeticEngine.recalculateAll();
-        renderFormulasList();
-        renderArithmeticResults();
+        renderFormulasListNew();
     }
 }
 
@@ -425,16 +470,14 @@ async function syncFormulasToBackend() {
 function loadFormulasFromModel(model) {
     if (model && model.arithmetic_formulas) {
         arithmeticEngine.loadFormulas(model.arithmetic_formulas);
-        renderFormulasList();
-        renderArithmeticResults();
+        renderFormulasListNew();
     } else {
         arithmeticEngine.clearFormulas();
-        renderFormulasList();
-        renderArithmeticResults();
+        renderFormulasListNew();
     }
 }
 
-// Helper function for HTML escaping (if not already available)
+// Helper function for HTML escaping
 function escapeHtml(unsafe) {
     if (typeof unsafe !== 'string') return unsafe;
     return unsafe

@@ -443,76 +443,202 @@ input:focus, select:focus {
 }
 
 /* ── Streams Arithmetic ─────────────────────────────────────────── */
-.arithmetic-controls {
+.warning-box {
+    padding: 16px;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 8px;
+    margin-bottom: 24px;
+    font-weight: 500;
+}
+
+.arithmetic-builder {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 24px;
     margin-bottom: 24px;
 }
 
-.formula-builder {
+.builder-section {
+    background: #f9f9f9;
+    padding: 16px;
+    border-radius: 8px;
+}
+
+.builder-section h3 {
+    margin-top: 0;
+    margin-bottom: 12px;
+    font-size: 16px;
+}
+
+.stream-list {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    max-height: 400px;
+    overflow-y: auto;
 }
 
-.stream-button-container {
+.stream-item {
+    padding: 12px;
+    background: white;
+    border: 2px solid #2196F3;
+    border-radius: 6px;
+    cursor: grab;
+    font-weight: 500;
+    transition: all 0.2s;
+    user-select: none;
+}
+
+.stream-item:hover {
+    background: #e3f2fd;
+    transform: translateX(4px);
+}
+
+.stream-item:active {
+    cursor: grabbing;
+}
+
+.stream-item.revenue {
+    border-left: 4px solid #4caf50;
+}
+
+.stream-item.cost {
+    border-left: 4px solid #f44336;
+}
+
+.formula-workspace {
+    margin-bottom: 16px;
+}
+
+.formula-display {
+    min-height: 80px;
+    padding: 16px;
+    background: white;
+    border: 2px dashed #ccc;
+    border-radius: 8px;
+    font-size: 16px;
+    font-family: 'Courier New', monospace;
+    line-height: 1.6;
+    transition: border-color 0.3s;
+    word-wrap: break-word;
+}
+
+.formula-display.drag-over {
+    border-color: #2196F3;
+    background: #e3f2fd;
+}
+
+.formula-display .placeholder-text {
+    color: #999;
+    font-style: italic;
+}
+
+.formula-display .stream-chip {
+    display: inline-block;
+    padding: 4px 12px;
+    background: #2196F3;
+    color: white;
+    border-radius: 16px;
+    margin: 2px;
+    font-size: 14px;
+}
+
+.formula-display .operator {
+    color: #666;
+    padding: 0 4px;
+    font-weight: bold;
+}
+
+.operator-buttons {
     display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
     flex-wrap: wrap;
-    gap: 4px;
-    margin-top: 8px;
 }
 
-.stream-button {
-    padding: 4px 8px;
-    font-size: 12px;
-    border: 1px solid #ddd;
-    background: #f5f5f5;
+.op-btn {
+    padding: 12px 20px;
+    font-size: 18px;
+    font-weight: bold;
+    border: 2px solid #ddd;
+    background: white;
+    border-radius: 8px;
     cursor: pointer;
-    border-radius: 4px;
-    transition: background 0.2s;
+    transition: all 0.2s;
 }
 
-.stream-button:hover {
-    background: #e0e0e0;
+.op-btn:hover {
+    background: #f5f5f5;
+    border-color: #2196F3;
 }
 
-.saved-formulas {
+.op-btn:active {
+    transform: scale(0.95);
+}
+
+.op-btn.op-clear {
+    background: #f44336;
+    color: white;
+    border-color: #d32f2f;
+    margin-left: auto;
+}
+
+.op-btn.op-clear:hover {
+    background: #d32f2f;
+}
+
+.saved-formulas-section {
     margin-top: 24px;
     padding: 16px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    background: #fafafa;
+    background: #f9f9f9;
+    border-radius: 8px;
 }
 
-.saved-formulas h3 {
+.saved-formulas-section h3 {
     margin-top: 0;
     margin-bottom: 12px;
 }
 
 .formula-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px;
-    margin-bottom: 8px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 16px;
+    align-items: start;
+    padding: 12px;
+    margin-bottom: 12px;
     background: #fff;
-    border-radius: 4px;
+    border-radius: 6px;
     border: 1px solid #eee;
 }
 
-.formula-item .formula-text {
-    font-family: monospace;
-    color: #333;
-    margin-left: 8px;
+.formula-item-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
-.arithmetic-results {
-    margin-top: 24px;
+.formula-item-name {
+    font-weight: 600;
+    font-size: 16px;
+}
+
+.formula-item-expression {
+    font-family: 'Courier New', monospace;
+    color: #666;
+    font-size: 14px;
+}
+
+.formula-item-chart {
+    margin-top: 12px;
+    width: 100%;
 }
 
 .formula-result-section {
-    margin-bottom: 32px;
+    margin-bottom: 24px;
     padding: 16px;
     border: 1px solid #ddd;
-    border-radius: 4px;
+    border-radius: 8px;
     background: #fff;
 }
 

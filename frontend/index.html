@@ -159,40 +159,55 @@
             <!-- Tab: Streams Arithmetic -->
             <div id="tab-arithmetic" class="tab-content">
                 <h2>Streams Arithmetic</h2>
-                <p class="help-text">Perform calculations on stream cashflows. Build formulas using stream names and basic operators (+, -, *, /, parentheses).</p>
+                <p class="help-text">Create custom calculations by combining streams with arithmetic operations.</p>
 
-                <div class="arithmetic-controls">
-                    <div class="form-group">
-                        <label for="formula-name">Formula Name</label>
-                        <input type="text" id="formula-name" placeholder="e.g. Total Revenue">
-                    </div>
+                <div id="arithmetic-no-calc" class="warning-box" style="display:none;">
+                    ⚠️ Run a calculation first to enable formula builder (Calculate tab → Run Deterministic or Monte Carlo)
+                </div>
 
-                    <div class="form-group">
-                        <label for="formula-input">Formula</label>
-                        <div class="formula-builder">
-                            <input type="text" id="formula-input" placeholder="e.g. Enterprise + SMB">
-                            <div id="stream-buttons" class="stream-button-container"></div>
+                <div id="arithmetic-builder" class="arithmetic-builder">
+                    <div class="builder-section">
+                        <h3>Available Streams</h3>
+                        <div id="available-streams" class="stream-list">
+                            <p class="help-text">Run a calculation to load streams</p>
                         </div>
-                        <p class="help-text">Available streams shown as buttons below. Click to insert into formula.</p>
                     </div>
 
-                    <div id="formula-preview" class="formula-preview" style="display:none;">
-                        <strong>Preview:</strong> <span id="formula-preview-text"></span>
-                    </div>
+                    <div class="builder-section">
+                        <h3>Build Formula</h3>
+                        <div class="form-group">
+                            <label for="formula-name-new">Formula Name</label>
+                            <input type="text" id="formula-name-new" placeholder="e.g. Total Revenue">
+                        </div>
 
-                    <div class="button-row">
-                        <button id="btn-add-formula" class="btn btn-primary">Add Formula</button>
-                        <button id="btn-clear-formula" class="btn">Clear</button>
+                        <div class="formula-workspace">
+                            <div id="formula-display" class="formula-display">
+                                <span class="placeholder-text">Drag streams here or use buttons below</span>
+                            </div>
+                            <div id="formula-preview-new" class="formula-preview" style="display:none;">
+                                <strong>Preview:</strong> <span id="formula-preview-text-new"></span>
+                            </div>
+                        </div>
+
+                        <div class="operator-buttons">
+                            <button class="op-btn" data-op="+">+</button>
+                            <button class="op-btn" data-op="-">−</button>
+                            <button class="op-btn" data-op="*">×</button>
+                            <button class="op-btn" data-op="/">/</button>
+                            <button class="op-btn" data-op="(">(</button>
+                            <button class="op-btn" data-op=")">)</button>
+                            <button class="op-btn op-clear" data-op="clear">Clear</button>
+                        </div>
+
+                        <div class="button-row">
+                            <button id="btn-save-formula" class="btn btn-primary">Save Formula</button>
+                        </div>
                     </div>
                 </div>
 
-                <div id="saved-formulas" class="saved-formulas">
+                <div id="saved-formulas-section" class="saved-formulas-section">
                     <h3>Saved Formulas</h3>
-                    <div id="formulas-list"></div>
-                </div>
-
-                <div id="arithmetic-results" class="arithmetic-results">
-                    <p class="placeholder">Add a formula and run calculations to see results.</p>
+                    <div id="formulas-list-new"></div>
                 </div>
             </div>
 
