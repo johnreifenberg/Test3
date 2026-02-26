@@ -358,10 +358,14 @@ function renderFormulasListNew() {
         if (formula.cashflows && formula.cashflows.length > 0) {
             const total = formula.cashflows.reduce((a, b) => a + b, 0);
             const avg = total / formula.cashflows.length;
+            const max = Math.max(...formula.cashflows);
+            const min = Math.min(...formula.cashflows);
             statsHTML = `
                 <div class="result-stats">
                     <span>Total: $${total.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
-                    <span>Avg: $${avg.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
+                    <span>Avg/Month: $${avg.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
+                    <span>Max: $${max.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
+                    <span>Min: $${min.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
                 </div>
             `;
         }
@@ -370,13 +374,15 @@ function renderFormulasListNew() {
         const canvasId = `chart-formula-${formula.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
 
         item.innerHTML = `
-            <div class="formula-item-content">
-                <div class="formula-item-name">${escapeHtml(formula.name)}</div>
-                <div class="formula-item-expression">${escapeHtml(formula.formula)}</div>
-                ${statsHTML}
-                ${formula.cashflows ? `<canvas id="${canvasId}" class="formula-item-chart" height="200"></canvas>` : ''}
+            <div class="formula-item-header">
+                <div class="formula-item-content">
+                    <div class="formula-item-name">${escapeHtml(formula.name)}</div>
+                    <div class="formula-item-expression">${escapeHtml(formula.formula)}</div>
+                </div>
+                <button class="btn btn-sm" onclick="removeFormulaNew('${escapeHtml(formula.name)}')">Remove</button>
             </div>
-            <button class="btn btn-sm" onclick="removeFormulaNew('${escapeHtml(formula.name)}')">Remove</button>
+            ${statsHTML}
+            ${formula.cashflows ? `<div class="formula-item-chart-container"><canvas id="${canvasId}" class="formula-item-chart"></canvas></div>` : ''}
         `;
         container.appendChild(item);
 
@@ -402,19 +408,44 @@ function renderFormulaChart(canvasId, label, cashflows) {
                 borderColor: '#2196F3',
                 backgroundColor: 'rgba(33, 150, 243, 0.1)',
                 tension: 0.1,
-                fill: true
+                fill: true,
+                pointRadius: 2,
+                pointHoverRadius: 4
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: {display: false}
+                legend: {display: false},
+                title: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: (context) => {
+                            const value = context.parsed.y;
+                            return label + ': $' + value.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
+                        }
+                    }
+                }
             },
             scales: {
+                x: {
+                    grid: {
+                        display: false
+                    },
+                    ticks: {
+                        maxRotation: 0,
+                        autoSkipPadding: 20
+                    }
+                },
                 y: {
                     ticks: {
                         callback: (value) => '$' + value.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})
+                    },
+                    grid: {
+                        color: '#f0f0f0'
                     }
                 }
             }
