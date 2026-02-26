@@ -432,10 +432,24 @@ function removeFormulaNew(name) {
 // Hook into calculation results
 function updateArithmeticEngine(results) {
     if (results && results.stream_details) {
+        // Get model reference (could be session.model or currentModel)
+        const model = (typeof session !== 'undefined' && session.model) ? session.model : currentModel;
+
+        if (!model || !model.streams) {
+            console.error('No model available for arithmetic engine');
+            return;
+        }
+
         // Convert stream_details object to array format
         const detailsArray = Object.entries(results.stream_details).map(([id, cashflows]) => {
-            // Find stream name from session
-            const stream = session.model.streams.find(s => s.id === id);
+            // Access stream directly by ID (streams is an object/dict, not array)
+            let stream;
+            if (Array.isArray(model.streams)) {
+                stream = model.streams.find(s => s.id === id);
+            } else {
+                stream = model.streams[id];
+            }
+
             return {
                 stream_name: stream ? stream.name : id,
                 stream_type: stream ? stream.stream_type : 'REVENUE',
