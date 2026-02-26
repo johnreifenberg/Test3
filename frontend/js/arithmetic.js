@@ -117,15 +117,71 @@ class ArithmeticEngine {
         }
 
         this.formulas.push({name, formula, cashflows: result.cashflows});
+        syncFormulasToBackend();  // Persist to backend
         return {success: true};
     }
 
     removeFormula(name) {
         this.formulas = this.formulas.filter(f => f.name !== name);
+        syncFormulasToBackend();  // Persist to backend
     }
 
     getFormulas() {
         return this.formulas;
+    }
+
+    clearFormulas() {
+        this.formulas = [];
+    }
+
+    loadFormulas(formulas) {
+        /**
+         * Load formulas from saved model data.
+         * Formulas are stored as [{name, formula}] without cashflows.
+         * Cashflows will be recalculated when results are available.
+         */
+        this.formulas = [];
+        if (!formulas || !Array.isArray(formulas)) {
+            return;
+        }
+        for (const f of formulas) {
+            if (f.name && f.formula) {
+                // Don't evaluate yet - wait for calculation results
+                this.formulas.push({
+                    name: f.name,
+                    formula: f.formula,
+                    cashflows: null  // Will be calculated later
+                });
+            }
+        }
+    }
+
+    exportFormulas() {
+        /**
+         * Export formulas for saving to model JSON.
+         * Only save name and formula, not cashflows (they're derived).
+         */
+        return this.formulas.map(f => ({
+            name: f.name,
+            formula: f.formula
+        }));
+    }
+
+    recalculateAll() {
+        /**
+         * Recalculate all formulas using current stream details.
+         * Call this after loading formulas or after new calculation results.
+         */
+        const updatedFormulas = [];
+        for (const formula of this.formulas) {
+            const result = this.evaluateFormula(formula.formula);
+            updatedFormulas.push({
+                name: formula.name,
+                formula: formula.formula,
+                cashflows: result.cashflows || []
+            });
+        }
+        this.formulas = updatedFormulas;
     }
 }
 
@@ -144,6 +200,15 @@ function initArithmeticTab() {
     // Populate stream buttons
     updateStreamButtons();
 
+    // Real-time formula preview with debouncing
+    let previewTimeout = null;
+    formulaInput.addEventListener('input', () => {
+        clearTimeout(previewTimeout);
+        previewTimeout = setTimeout(() => {
+            updateFormulaPreview(formulaInput.value.trim());
+        }, 300);  // 300ms debounce
+    });
+
     btnAdd.addEventListener('click', () => {
         const name = formulaName.value.trim();
         const formula = formulaInput.value.trim();
@@ -161,6 +226,7 @@ function initArithmeticTab() {
 
         formulaName.value = '';
         formulaInput.value = '';
+        hideFormulaPreview();
         renderFormulasList();
         renderArithmeticResults();
     });
@@ -168,7 +234,39 @@ function initArithmeticTab() {
     btnClear.addEventListener('click', () => {
         formulaName.value = '';
         formulaInput.value = '';
+        hideFormulaPreview();
     });
+}
+
+function updateFormulaPreview(formula) {
+    const previewDiv = document.getElementById('formula-preview');
+    const previewText = document.getElementById('formula-preview-text');
+
+    if (!formula) {
+        hideFormulaPreview();
+        return;
+    }
+
+    const result = arithmeticEngine.evaluateFormula(formula);
+
+    if (result.error) {
+        previewDiv.className = 'formula-preview error';
+        previewText.textContent = result.error;
+        previewDiv.style.display = 'block';
+    } else if (result.cashflows) {
+        const total = result.cashflows.reduce((a, b) => a + b, 0);
+        const avg = total / result.cashflows.length;
+        previewDiv.className = 'formula-preview success';
+        previewText.textContent = `Total: $${total.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})} | Avg/Month: $${avg.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
+        previewDiv.style.display = 'block';
+    } else {
+        hideFormulaPreview();
+    }
+}
+
+function hideFormulaPreview() {
+    const previewDiv = document.getElementById('formula-preview');
+    previewDiv.style.display = 'none';
 }
 
 function updateStreamButtons() {
@@ -302,6 +400,37 @@ function updateArithmeticEngine(results) {
     if (results && results.stream_details) {
         arithmeticEngine.setStreamDetails(results.stream_details);
         updateStreamButtons();
+        // Recalculate existing formulas with new stream data
+        arithmeticEngine.recalculateAll();
+        renderFormulasList();
+        renderArithmeticResults();
+    }
+}
+
+// Sync formulas to backend
+async function syncFormulasToBackend() {
+    const formulas = arithmeticEngine.exportFormulas();
+    try {
+        await fetch('http://localhost:8989/model/formulas', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formulas)
+        });
+    } catch (error) {
+        console.error('Failed to sync formulas to backend:', error);
+    }
+}
+
+// Load formulas from model
+function loadFormulasFromModel(model) {
+    if (model && model.arithmetic_formulas) {
+        arithmeticEngine.loadFormulas(model.arithmetic_formulas);
+        renderFormulasList();
+        renderArithmeticResults();
+    } else {
+        arithmeticEngine.clearFormulas();
+        renderFormulasList();
+        renderArithmeticResults();
     }
 }
 

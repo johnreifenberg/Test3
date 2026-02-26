@@ -534,6 +534,26 @@ input:focus, select:focus {
     border-radius: 4px;
 }
 
+.formula-preview {
+    margin-top: 12px;
+    padding: 12px;
+    background: #e3f2fd;
+    border-left: 4px solid #2196F3;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.formula-preview.error {
+    background: #ffebee;
+    border-left-color: #d32f2f;
+    color: #d32f2f;
+}
+
+.formula-preview.success {
+    background: #e8f5e9;
+    border-left-color: #4caf50;
+}
+
 /* ── Utility ────────────────────────────────────────────────────── */
 .mt-2 { margin-top: 8px; }
 .mt-4 { margin-top: 16px; }

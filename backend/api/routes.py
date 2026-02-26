@@ -128,6 +128,14 @@ async def update_model_settings(req: NewModelRequest):
     return model.to_dict()
 
 
+@router.put("/model/formulas")
+async def update_arithmetic_formulas(formulas: List[dict]):
+    """Update arithmetic formulas in the model."""
+    model = _require_model()
+    model.arithmetic_formulas = formulas
+    return {"status": "ok", "formulas": model.arithmetic_formulas}
+
+
 @router.post("/model/load")
 async def load_model_file(file: UploadFile = File(...)):
     try:

@@ -345,11 +345,117 @@ class ExcelExporter:
         ws.column_dimensions["A"].width = 18
         ws.column_dimensions["B"].width = 18
 
+    def create_arithmetic_sheet(self, wb: Workbook) -> None:
+        """Create a sheet showing arithmetic formulas and their calculated results."""
+        # Skip if no formulas
+        if not self.model.arithmetic_formulas:
+            return
+
+        # Only create sheet if we have calculation results with stream details
+        if not self.results or "stream_details" not in self.results:
+            return
+
+        ws = wb.create_sheet(title="Arithmetic Formulas")
+
+        # Title
+        ws.cell(row=1, column=1, value="Arithmetic Formulas").font = Font(bold=True, size=14)
+        ws.cell(row=2, column=1, value="Custom formulas calculated on stream cashflows")
+
+        row = 4
+        ws.cell(row=row, column=1, value="Formula Name").font = self.header_font
+        ws.cell(row=row, column=2, value="Formula Expression").font = self.header_font
+        ws.cell(row=row, column=3, value="Total Value").font = self.header_font
+        self._style_header_row(ws, row, 3)
+
+        # Build stream cashflows lookup from results
+        stream_details = self.results.get("stream_details", {})
+        stream_cashflows = {}
+        for stream_id, cashflows in stream_details.items():
+            stream = self.model.streams.get(stream_id)
+            if stream:
+                stream_cashflows[stream.name] = cashflows
+
+        # List each formula with its total
+        row += 1
+        for formula_data in self.model.arithmetic_formulas:
+            name = formula_data.get("name", "Unknown")
+            formula = formula_data.get("formula", "")
+
+            ws.cell(row=row, column=1, value=name)
+            ws.cell(row=row, column=2, value=formula)
+
+            # Calculate total by evaluating formula month-by-month
+            try:
+                cashflows = self._evaluate_arithmetic_formula(formula, stream_cashflows)
+                total = sum(cashflows)
+                ws.cell(row=row, column=3, value=total).number_format = self.currency_fmt
+            except Exception:
+                ws.cell(row=row, column=3, value="Error")
+
+            row += 1
+
+        # Add monthly breakdown section
+        if self.model.arithmetic_formulas:
+            row += 2
+            ws.cell(row=row, column=1, value="Monthly Breakdown").font = Font(bold=True, size=12)
+            row += 1
+
+            # Header row: Month | Formula1 | Formula2 | ...
+            ws.cell(row=row, column=1, value="Month").font = self.header_font
+            for col_idx, formula_data in enumerate(self.model.arithmetic_formulas, start=2):
+                ws.cell(row=row, column=col_idx, value=formula_data.get("name", "")).font = self.header_font
+            self._style_header_row(ws, row, len(self.model.arithmetic_formulas) + 1)
+
+            # Data rows: each month
+            n_months = self.model.settings.forecast_months
+            for month in range(n_months):
+                row += 1
+                ws.cell(row=row, column=1, value=f"M{month}")
+
+                for col_idx, formula_data in enumerate(self.model.arithmetic_formulas, start=2):
+                    formula = formula_data.get("formula", "")
+                    try:
+                        cashflows = self._evaluate_arithmetic_formula(formula, stream_cashflows)
+                        value = cashflows[month] if month < len(cashflows) else 0
+                        ws.cell(row=row, column=col_idx, value=value).number_format = self.currency_fmt
+                    except Exception:
+                        ws.cell(row=row, column=col_idx, value="Error")
+
+        ws.column_dimensions["A"].width = 20
+        ws.column_dimensions["B"].width = 40
+        ws.column_dimensions["C"].width = 18
+
+    def _evaluate_arithmetic_formula(self, formula: str, stream_cashflows: dict) -> list:
+        """Evaluate an arithmetic formula month-by-month using stream cashflows."""
+        # Determine max length
+        max_length = max((len(cfs) for cfs in stream_cashflows.values()), default=0)
+        if max_length == 0:
+            return []
+
+        result = []
+        for month in range(max_length):
+            # Build expression with values for this month
+            expr = formula
+            for name, cfs in stream_cashflows.items():
+                value = cfs[month] if month < len(cfs) else 0
+                # Replace stream name with value (use simple string replace)
+                # Note: This is a simplified version; full implementation uses regex
+                expr = expr.replace(name, str(value))
+
+            try:
+                # Evaluate the expression
+                result.append(eval(expr))
+            except Exception:
+                result.append(0)  # Default to 0 on error
+
+        return result
+
     def export(self, filepath: str) -> None:
         wb = Workbook()
         self.create_summary_sheet(wb)
         self.create_cashflows_sheet(wb)
         self.create_streams_sheet(wb)
+        self.create_arithmetic_sheet(wb)
         self.create_sensitivity_sheet(wb)
         self.create_distribution_sheet(wb)
         wb.save(filepath)

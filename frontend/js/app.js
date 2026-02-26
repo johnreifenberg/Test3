@@ -86,6 +86,9 @@ function renderModel() {
             document.getElementById('escalation-section').style.display = 'none';
         }
     }
+
+    // Load arithmetic formulas if present
+    loadFormulasFromModel(currentModel);
 }
 
 async function createNewModel() {
@@ -272,10 +275,15 @@ function displayDeterministicResults(results) {
     let cardsHTML;
     if (isIRR) {
         const irrDisplay = results.irr !== null ? formatPercent(results.irr) : (results.irr_error || 'N/A');
+        const mirrDisplay = results.mirr !== null ? formatPercent(results.mirr) : 'N/A';
         cardsHTML = `
             <div class="result-card">
                 <div class="label">Internal Rate of Return</div>
                 <div class="value">${irrDisplay}</div>
+            </div>
+            <div class="result-card">
+                <div class="label">Modified IRR</div>
+                <div class="value">${mirrDisplay}</div>
             </div>
         `;
         if (results.irr_error && results.irr === null) {
@@ -313,12 +321,35 @@ function displayDeterministicResults(results) {
                 </div>`;
         }
 
+        // MIRR display
+        let mirrCardHTML;
+        if (results.mirr !== null) {
+            mirrCardHTML = `
+                <div class="result-card">
+                    <div class="label">Modified IRR</div>
+                    <div class="value">${formatPercent(results.mirr)}</div>
+                </div>`;
+        } else if (results.mirr_error) {
+            mirrCardHTML = `
+                <div class="result-card">
+                    <div class="label">Modified IRR</div>
+                    <div class="value">N/A</div>
+                </div>`;
+        } else {
+            mirrCardHTML = `
+                <div class="result-card">
+                    <div class="label">Modified IRR</div>
+                    <div class="value">N/A</div>
+                </div>`;
+        }
+
         cardsHTML = `
             <div class="result-card">
                 <div class="label">Net Present Value</div>
                 <div class="value">${formatCurrency(results.npv)}</div>
             </div>
             ${irrCardHTML}
+            ${mirrCardHTML}
             <div class="result-card">
                 <div class="label">Terminal Value (PV)</div>
                 <div class="value">${formatCurrency(results.terminal_value)}</div>

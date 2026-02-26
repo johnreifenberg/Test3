@@ -49,6 +49,7 @@ class FinancialModel:
         self.settings: ModelSettings = settings or ModelSettings()
         self.streams: Dict[str, Stream] = {}
         self.stream_order: List[str] = []
+        self.arithmetic_formulas: List[dict] = []  # [{name: str, formula: str}]
 
     def add_stream(self, stream: Stream) -> None:
         self.streams[stream.id] = stream
@@ -204,6 +205,7 @@ class FinancialModel:
             "settings": self.settings.to_dict(),
             "streams": ordered,
             "stream_order": list(self.stream_order),
+            "arithmetic_formulas": self.arithmetic_formulas,
         }
 
     @classmethod
@@ -216,4 +218,6 @@ class FinancialModel:
             model.add_stream(Stream.from_dict(s_data))
         if "stream_order" in data:
             model.stream_order = data["stream_order"]
+        if "arithmetic_formulas" in data:
+            model.arithmetic_formulas = data["arithmetic_formulas"]
         return model

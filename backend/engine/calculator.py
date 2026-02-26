@@ -233,6 +233,62 @@ class DCFCalculator:
             npv_at_10pct = npv_at_rate(0.10)
             return None, f"IRR calculation failed: {str(e)}. NPV at 10% = ${npv_at_10pct:,.0f}"
 
+    def calculate_mirr(self, cashflows: np.ndarray, finance_rate: float = 0.10, reinvest_rate: float = 0.10) -> Tuple[Optional[float], Optional[str]]:
+        """Calculate Modified IRR - handles non-conventional cashflows better.
+
+        MIRR separates financing cost (for negative cashflows) from reinvestment return
+        (for positive cashflows), providing a more realistic metric for projects with
+        multiple sign changes in cashflows.
+
+        Args:
+            cashflows: Monthly cashflows
+            finance_rate: Annual rate for financing negative cashflows (default 10%)
+            reinvest_rate: Annual rate for reinvesting positive cashflows (default 10%)
+
+        Returns (mirr_annualized, error_message). One of the two will be None.
+        """
+        has_positive = np.any(cashflows > 0)
+        has_negative = np.any(cashflows < 0)
+
+        if not (has_positive and has_negative):
+            return None, "No sign change in cashflows - MIRR undefined"
+
+        n = len(cashflows)
+        if n < 2:
+            return None, "Need at least 2 periods for MIRR calculation"
+
+        # Separate positive and negative cashflows
+        positive_flows = np.where(cashflows > 0, cashflows, 0)
+        negative_flows = np.where(cashflows < 0, cashflows, 0)
+
+        # Future value of positive cashflows at reinvestment rate (monthly)
+        monthly_reinvest = reinvest_rate / 12
+        fv_positive = 0.0
+        for i, pv in enumerate(positive_flows):
+            if pv > 0:
+                periods_to_end = n - 1 - i
+                fv_positive += pv * ((1 + monthly_reinvest) ** periods_to_end)
+
+        # Present value of negative cashflows at finance rate (monthly)
+        monthly_finance = finance_rate / 12
+        pv_negative = 0.0
+        for i, pv in enumerate(negative_flows):
+            if pv < 0:
+                pv_negative += pv / ((1 + monthly_finance) ** i)
+
+        if fv_positive == 0:
+            return None, "No positive cashflows for MIRR calculation"
+        if pv_negative == 0:
+            return None, "No negative cashflows for MIRR calculation"
+
+        # MIRR formula: ((FV_positive / |PV_negative|) ^ (1/(n-1))) - 1
+        try:
+            mirr_monthly = ((fv_positive / abs(pv_negative)) ** (1.0 / (n - 1))) - 1
+            mirr_annual = mirr_monthly * 12  # Annualize
+            return float(mirr_annual), None
+        except (ValueError, ZeroDivisionError) as e:
+            return None, f"MIRR calculation failed: {str(e)}"
+
     def _run_single(self, deterministic: bool) -> tuple:
         """Run a single calculation pass (used by both deterministic and MC)."""
         execution_order = self.model.get_execution_order()
@@ -297,6 +353,9 @@ class DCFCalculator:
         # IRR (informational)
         irr, irr_error = self.calculate_irr(total_cashflows)
 
+        # MIRR (modified IRR - better for non-conventional cashflows)
+        mirr, mirr_error = self.calculate_mirr(total_cashflows, finance_rate=discount_rate, reinvest_rate=discount_rate)
+
         # Payback period
         payback = self.calculate_payback_period(total_cashflows, discount_rate)
 
@@ -306,6 +365,8 @@ class DCFCalculator:
             "npv": npv,
             "irr": irr,
             "irr_error": irr_error,
+            "mirr": mirr,
+            "mirr_error": mirr_error,
             "terminal_value": terminal_value_total,
             "discount_rate": discount_rate,
             "payback_period": payback,
@@ -321,12 +382,17 @@ class DCFCalculator:
         # IRR (primary result)
         irr, irr_error = self.calculate_irr(total_cashflows)
 
+        # MIRR (alternative metric using 10% as both finance and reinvestment rate)
+        mirr, mirr_error = self.calculate_mirr(total_cashflows, finance_rate=0.10, reinvest_rate=0.10)
+
         return {
             "mode": "deterministic",
             "calculation_mode": "IRR",
             "npv": 0.0,
             "irr": irr,
             "irr_error": irr_error,
+            "mirr": mirr,
+            "mirr_error": mirr_error,
             "terminal_value": None,
             "discount_rate": None,
             "cashflows": total_cashflows.tolist(),
